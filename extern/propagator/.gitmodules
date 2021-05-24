@@ -1,0 +1,6 @@
+[submodule "extern/utils"]
+	path = extern/utils
+	url = git@gitlab.dei.unipd.it:dominiqs/utils.git
+[submodule "extern/fmt"]
+	path = extern/fmt
+	url = https://github.com/fmtlib/fmt.git
