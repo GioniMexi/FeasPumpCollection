@@ -30,16 +30,6 @@ Usage
 $ .fp2 prob_file --config (-c) config_file
 ```
 
-ToDo
--------------
-
-- [ ] SoPlex/SCIP Interface
-- [ ] Multiple Reference Vectors in the Projection Step
-- [ ] Choices of Reference Vectors
-- [ ] New Objective Scaling
-- [ ] mRENS in Stage 3
-
-
 References
 ------------
 <a id="1">[1]</a> 
