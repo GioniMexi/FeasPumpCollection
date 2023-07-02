@@ -14,8 +14,8 @@ if (NOT CPLEX_LIBFORMAT)
 endif()
 
 # Find CPLEX headers and library
-find_path(CPLEX_INCLUDE_DIR "ilcplex/cplex.h" PATHS ${CPLEX_ROOT_DIR}/include)
-find_library(CPLEX_LIBRARY "libcplex.a" PATHS ${CPLEX_ROOT_DIR}/lib/${CPLEX_LIBFORMAT})
+find_path(CPLEX_INCLUDE_DIR "ilcplex/cplex.h" PATHS $ENV{CPLEX_ROOT_DIR}/include)
+find_library(CPLEX_LIBRARY "libcplex.a" PATHS $ENV{CPLEX_ROOT_DIR}/lib/${CPLEX_LIBFORMAT})
 
 mark_as_advanced(CPLEX_INCLUDE_DIR CPLEX_LIBRARY)
 

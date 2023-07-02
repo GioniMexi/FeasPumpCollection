@@ -3,6 +3,8 @@
  * @brief Feasibility Pump algorithm Source
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
+ * 2023
  */
 
 #include <map>
@@ -51,7 +53,12 @@ static double solutionsDistance(const std::vector<int>& integers, const std::vec
 	for (int j: integers) tot += fabs(x1[j] - x2[j]);
 	return tot;
 }
-
+static double solutionsLinfDistance(const std::vector<int>& integers, const std::vector<double>& x1, const std::vector<double>& x2)
+{
+	double dist = 0.0;
+	for (int j: integers) dist = std::max(dist, fabs(x1[j] - x2[j]));
+	return dist;
+}
 static bool areSolutionsEqual(const std::vector<int>& integers, const std::vector<double>& x1, const std::vector<double>& x2, double eps)
 {
 	for (int j: integers) if (different(x1[j], x2[j], eps)) return false;
@@ -66,13 +73,70 @@ static bool isSolutionFeasible(const std::vector<double>& x, const std::vector<C
 	return true;
 }
 
+static std::vector<double> exponDecayVector(const double factor,const int numPoints)
+{
+		// compute the sum of all elements -> used to make a convex combination
+		double sumAll = 0.0;
+
+		// resVector contains the barycentric coordinates of the n points
+		std::vector<double> resVector;
+
+		double currElement = 1.0;
+		resVector.push_back(currElement);
+		sumAll += currElement;
+		for (int i = 1; i < numPoints; i++)
+		{
+			currElement = currElement * factor;
+			resVector.push_back(currElement);
+			sumAll += currElement;
+
+		}
+		// make the sum of all vector elements convex
+		for (int i = 0; i < numPoints; i++)
+		{
+			resVector[i] = resVector[i] / sumAll;
+		}
+
+		DOMINIQS_ASSERT( resVector.size() == numPoints);
+		return resVector;
+}
+
+static std::vector<double> harmonicVector(const int numPoints)
+{
+		// compute the sum of all elements -> used to make a convex combination
+		double sumAll = 0.0;
+
+		// resVector contains the barycentric coordinates of the n points
+		std::vector<double> resVector;
+
+		double currElement = 1.0;		
+		resVector.push_back(currElement);
+		sumAll += currElement;
+		for (int i = 1; i < numPoints; i++)
+		{
+			currElement = 1.0 / (i+1);
+			resVector.push_back(currElement);
+			sumAll += currElement;
+
+		}
+		// make the sum of all vector elements convex
+		for (int i = 0; i < numPoints; i++)
+		{
+			resVector[i] = resVector[i] / sumAll;
+		}
+
+		DOMINIQS_ASSERT( resVector.size() == numPoints);
+		return resVector;
+}
+
 
 namespace dominiqs {
 
 static const double DEF_TIME_LIMIT = 3600.0;
 static const double DEF_TIME_MULT = 100.0;
 static const double DEF_LPITER_MULT = -1.0;
-static const int DEF_STAGE_ITER_LIMIT = 50;
+static const int DEF_STAGE_1_ITER_LIMIT = 50;
+static const int DEF_STAGE_2_ITER_LIMIT = 50;
 static const int DEF_ITER_LIMIT = 100;
 static const int DEF_AVG_FLIPS = 20;
 static const double DEF_INTEGRALITY_EPS = 1e-6;
@@ -84,6 +148,10 @@ static const bool DEF_DO_STAGE_3 = false;
 static const bool DEF_WALKSAT_PERTURBE = true;
 static const bool DEF_RANDOMIZE_LP = false;
 static const bool DEF_PENALTYOBJ = false;
+static const bool DEF_EXPOBJ = false;
+static const bool DEF_LOGISOBJ = false;
+static const bool DEF_ACFP = false;
+
 static const char DEF_FIRST_OPT_METHOD = 'S';
 static const char DEF_REOPT_METHOD = 'S';
 
@@ -93,16 +161,75 @@ static const double BIGM = 1e9;
 static const double BIGBIGM = 1e15;
 static const double INFBOUND = 1e20;
 
+// using more than one integer in the objective possible
+static const int DEF_INTEGERS_OBJ = 1;
+static const double DEF_INTEGER_SCALE_OBJ = 1.0;
+static const int DEF_LESS_VIOLATED_INT = 0;
+static const int DEF_LESS_DISTANCE_INT = 0;
+static const int DEF_BEST_OBJ_INT = 0;
+static const int DEF_HARMONIC_WEIGHTS = 0;
+static const int DEF_EXP_DECAY_WEIGHTS = 0;
+
+// using more than one integer in the stage 3 objective is possible
+static const int DEF_INTEGERS_OBJ_STAGE_3 = 1;
+static const double DEF_INTEGER_SCALE_STAGE_3 = 1.0;
+static const int DEF_LESS_VIOLATED_INT_STAGE_3 = 0;
+static const int DEF_BEST_OBJ_INT_STAGE_3 = 0;
+static const int DEF_HARMONIC_WEIGHTS_STAGE_3 = 0;
+
+// use more integers in stage3 objective
+static const bool DEF_NEW_STAGE_3 = false;
+static const bool DEF_RENS_STAGE_3 = false;
+static const bool DEF_MULTIRENS_STAGE_3 = false;
+static const bool DEF_NORMAL_MIP_STAGE_3 = false;
+static const bool DEF_RENS_CLOSEST_DIST_STAGE_3 = false;
+
+
+// number of fractional numbers to be considered in objective (not working)
+static const int DEF_FRACS_OBJ = 1;
+
+// barycenter coordinates either for the aggregated fractional point or the objective when using multiple integers
+static const double DEF_FRAC_SCALE_FACTOR = 1.0;
+
+// TODO: custom barycenter coordinates. For example if we want to use the first and third integers with
+// coordinates 0.75 and 0.25 the coordinate vector should be defined as e.g. {0.75, 0 , 0.25}
+
+// alternative objective scale
+static const bool DEF_NEW_OBJ_SCALE = false;
+static const bool DEF_SCALE_C_AND_DELTA = false;
+
+// for the KK parameter in stage 1 and 2
+static const int ITR1_NO_IMPR = 70;
+static const int ITR2_NO_IMPR = 600;
+
+//accumulate integers
+static const bool DEF_AGGREGATE_INT = false;
+
+static const double DEF_PDLP_TOLERANCE = 1.0e-6;
+static const double DEF_PDLP_TOLERANCE_DECREASE = 1.0;
+
+static const bool DEF_PDLP_WARMSTART = false;
 
 FeasibilityPump::FeasibilityPump() :
 	timeLimit(DEF_TIME_LIMIT), timeMult(DEF_TIME_MULT), lpIterMult(DEF_LPITER_MULT),
-	stageIterLimit(DEF_STAGE_ITER_LIMIT), iterLimit(DEF_ITER_LIMIT),
-	avgFlips(DEF_AVG_FLIPS), integralityEps(DEF_INTEGRALITY_EPS), seed(DEF_SEED),
-	alpha(DEF_ALPHA), alphaFactor(DEF_ALPHA_FACTOR), alphaDist(DEF_ALPHA_DIST),
+	stage1IterLimit(DEF_STAGE_1_ITER_LIMIT),stage2IterLimit(DEF_STAGE_2_ITER_LIMIT),
+	iterLimit(DEF_ITER_LIMIT), avgFlips(DEF_AVG_FLIPS), integralityEps(DEF_INTEGRALITY_EPS),
+	seed(DEF_SEED), alpha(DEF_ALPHA), alphaFactor(DEF_ALPHA_FACTOR), alphaDist(DEF_ALPHA_DIST),
 	doStage3(DEF_DO_STAGE_3), walksatPerturbe(DEF_WALKSAT_PERTURBE),
 	randomizeLP(DEF_RANDOMIZE_LP), penaltyObj(DEF_PENALTYOBJ),
 	firstOptMethod(DEF_FIRST_OPT_METHOD), reOptMethod(DEF_REOPT_METHOD),
-	objOffset(0.0), hasIncumbent(false)
+	objOffset(0.0), hasIncumbent(false), numIntegersObj(DEF_INTEGERS_OBJ),numFracsObj(DEF_FRACS_OBJ), 
+	newScaleC(DEF_NEW_OBJ_SCALE),newScaleDelta(DEF_SCALE_C_AND_DELTA),itr1NoImpr(ITR1_NO_IMPR),
+	itr2NoImpr(ITR2_NO_IMPR), fracScaleFactor(DEF_FRAC_SCALE_FACTOR), intScaleFactor(DEF_INTEGER_SCALE_OBJ),
+	aggregateInts(DEF_AGGREGATE_INT),newStage3(DEF_NEW_STAGE_3), stage3ScaleFactor(DEF_INTEGER_SCALE_STAGE_3),
+	stage3IntegersObj(DEF_INTEGERS_OBJ_STAGE_3),stage3lessViolatedIntegers(DEF_LESS_VIOLATED_INT_STAGE_3),
+	stage3bestObjIntegers(DEF_BEST_OBJ_INT_STAGE_3), stage3harmonicWeights(DEF_HARMONIC_WEIGHTS_STAGE_3),
+	expObj(DEF_EXPOBJ), logisObj(DEF_LOGISOBJ), analcenterFP(DEF_ACFP),
+	lessViolatedIntegers(DEF_LESS_VIOLATED_INT), bestObjIntegers(DEF_BEST_OBJ_INT), lessDistanceIntegers(DEF_LESS_DISTANCE_INT),
+	harmonicWeights(DEF_HARMONIC_WEIGHTS), exponDecayWeights(DEF_EXP_DECAY_WEIGHTS),
+	rensStage3(DEF_RENS_STAGE_3),multirensStage3(DEF_MULTIRENS_STAGE_3), normalMIPStage3(DEF_NORMAL_MIP_STAGE_3),
+	rensClosestDistStage3(DEF_RENS_CLOSEST_DIST_STAGE_3), pdlpTol(DEF_PDLP_TOLERANCE),
+	pdlpTolDecreaseFactor(DEF_PDLP_TOLERANCE_DECREASE), pdlpWarmStart(DEF_PDLP_WARMSTART)
 {
 }
 
@@ -127,9 +254,13 @@ void FeasibilityPump::readConfig()
 	else throw std::runtime_error(std::string("Unknown optimization method: ") + reMethod);
 	//other options
 	READ_FROM_CONFIG( timeLimit, DEF_TIME_LIMIT );
-	READ_FROM_CONFIG( timeMult, DEF_TIME_MULT );
+	// READ_FROM_CONFIG( timeMult, DEF_TIME_MULT );
+	timeMult = 0.0;
+	
 	READ_FROM_CONFIG( lpIterMult, DEF_LPITER_MULT );
-	READ_FROM_CONFIG( stageIterLimit, DEF_STAGE_ITER_LIMIT );
+	READ_FROM_CONFIG( stage1IterLimit, DEF_STAGE_1_ITER_LIMIT );
+	READ_FROM_CONFIG( stage2IterLimit, DEF_STAGE_2_ITER_LIMIT );
+
 	READ_FROM_CONFIG( iterLimit, DEF_ITER_LIMIT );
 	READ_FROM_CONFIG( avgFlips, DEF_AVG_FLIPS );
 	READ_FROM_CONFIG( integralityEps, DEF_INTEGRALITY_EPS );
@@ -141,6 +272,43 @@ void FeasibilityPump::readConfig()
 	READ_FROM_CONFIG( walksatPerturbe, DEF_WALKSAT_PERTURBE );
 	READ_FROM_CONFIG( randomizeLP, DEF_RANDOMIZE_LP );
 	READ_FROM_CONFIG( penaltyObj, DEF_PENALTYOBJ );
+
+	// new options
+	READ_FROM_CONFIG( numIntegersObj, DEF_INTEGERS_OBJ );
+	READ_FROM_CONFIG( numFracsObj, DEF_FRACS_OBJ );
+	READ_FROM_CONFIG( lessViolatedIntegers, DEF_LESS_VIOLATED_INT );
+	READ_FROM_CONFIG( lessDistanceIntegers, DEF_LESS_DISTANCE_INT );
+	READ_FROM_CONFIG( bestObjIntegers, DEF_BEST_OBJ_INT );
+	READ_FROM_CONFIG( harmonicWeights, DEF_HARMONIC_WEIGHTS );
+	READ_FROM_CONFIG( exponDecayWeights, DEF_EXP_DECAY_WEIGHTS );
+
+	READ_FROM_CONFIG( fracScaleFactor, DEF_FRAC_SCALE_FACTOR );
+	READ_FROM_CONFIG( intScaleFactor, DEF_INTEGER_SCALE_OBJ );
+	READ_FROM_CONFIG( newScaleC, DEF_NEW_OBJ_SCALE );
+	READ_FROM_CONFIG( newScaleDelta, DEF_SCALE_C_AND_DELTA );
+	READ_FROM_CONFIG( aggregateInts, DEF_AGGREGATE_INT );
+	READ_FROM_CONFIG( expObj, DEF_EXPOBJ );
+	READ_FROM_CONFIG( logisObj, DEF_LOGISOBJ );
+	READ_FROM_CONFIG( analcenterFP, DEF_ACFP );
+
+	READ_FROM_CONFIG( newStage3, DEF_NEW_STAGE_3 );
+	READ_FROM_CONFIG( rensStage3, DEF_RENS_STAGE_3 );
+	READ_FROM_CONFIG( multirensStage3, DEF_MULTIRENS_STAGE_3 );
+	READ_FROM_CONFIG( normalMIPStage3, DEF_NORMAL_MIP_STAGE_3 );
+	READ_FROM_CONFIG( rensClosestDistStage3, DEF_RENS_CLOSEST_DIST_STAGE_3 );
+
+	READ_FROM_CONFIG( stage3ScaleFactor, DEF_INTEGER_SCALE_STAGE_3 );
+	READ_FROM_CONFIG( stage3IntegersObj, DEF_INTEGERS_OBJ_STAGE_3 );
+	READ_FROM_CONFIG( stage3lessViolatedIntegers, DEF_LESS_VIOLATED_INT_STAGE_3 );
+	READ_FROM_CONFIG( stage3bestObjIntegers, DEF_BEST_OBJ_INT_STAGE_3 );
+	READ_FROM_CONFIG( stage3harmonicWeights, DEF_HARMONIC_WEIGHTS_STAGE_3 );
+
+	READ_FROM_CONFIG( pdlpTol, DEF_PDLP_TOLERANCE );
+	READ_FROM_CONFIG( pdlpTolDecreaseFactor, DEF_PDLP_TOLERANCE_DECREASE );
+	READ_FROM_CONFIG( pdlpWarmStart, DEF_PDLP_WARMSTART );
+
+
+	//till here
 	// display options
 	display.headerInterval = gConfig().get("headerInterval", 10);
 	display.iterationInterval = gConfig().get("iterationInterval", 1);
@@ -153,10 +321,51 @@ void FeasibilityPump::readConfig()
 	LOG_CONFIG( timeMult );
 	LOG_CONFIG( lpIterMult );
 	LOG_CONFIG( iterLimit );
-	LOG_CONFIG( stageIterLimit );
+	LOG_CONFIG( stage1IterLimit );
+	LOG_CONFIG( stage2IterLimit );
 	LOG_CONFIG( avgFlips );
 	LOG_CONFIG( integralityEps );
 	LOG_CONFIG( seed );
+
+	itr1NoImpr =  stage1IterLimit;
+	itr2NoImpr =  stage2IterLimit;
+
+
+	// added
+	LOG_CONFIG( numIntegersObj );
+	LOG_CONFIG( lessViolatedIntegers );
+	LOG_CONFIG( lessDistanceIntegers );
+	LOG_CONFIG( bestObjIntegers );
+	LOG_CONFIG( harmonicWeights );
+	LOG_CONFIG( exponDecayWeights );
+	LOG_CONFIG( intScaleFactor );
+	LOG_CONFIG( numFracsObj );
+	LOG_CONFIG( fracScaleFactor );
+	LOG_CONFIG( newScaleC );
+	LOG_CONFIG( newScaleDelta );
+	LOG_CONFIG( aggregateInts );
+	LOG_CONFIG( newStage3 );
+	LOG_CONFIG( rensStage3 );
+	LOG_CONFIG( multirensStage3 );
+	LOG_CONFIG( normalMIPStage3 );
+	LOG_CONFIG( rensClosestDistStage3 );
+
+	LOG_CONFIG( stage3ScaleFactor );
+	LOG_CONFIG( stage3IntegersObj );
+	LOG_CONFIG( stage3lessViolatedIntegers );
+	LOG_CONFIG( stage3bestObjIntegers );
+	LOG_CONFIG( stage3harmonicWeights );
+
+	LOG_CONFIG( expObj );
+	LOG_CONFIG( logisObj );
+	LOG_CONFIG( analcenterFP );
+
+	LOG_CONFIG( pdlpTol );
+	LOG_CONFIG( pdlpTolDecreaseFactor );
+	LOG_CONFIG( pdlpWarmStart );
+
+	// till here
+
 	LOG_CONFIG( alpha );
 	LOG_CONFIG( alphaFactor );
 	LOG_CONFIG( alphaDist );
@@ -164,6 +373,7 @@ void FeasibilityPump::readConfig()
 	LOG_CONFIG( walksatPerturbe );
 	LOG_CONFIG( randomizeLP );
 	LOG_CONFIG( penaltyObj );
+
 	rnd.setSeed(seed);
 	rnd.warmUp();
 	frac2int->readConfig();
@@ -206,6 +416,12 @@ void FeasibilityPump::reset()
 	flipsInRestart = 0;
 	maxFlipsInRestart = 0;
 	lastIntegerX.clear();
+
+	lastFracX.clear();
+	closestIntegerXs1.clear();
+	closestIntegerXs2.clear();
+	multipleIntegerX.clear();
+
 	chrono.reset();
 	lpWatch.reset();
 	roundWatch.reset();
@@ -219,6 +435,7 @@ void FeasibilityPump::reset()
 	objOffset = 0.0;
 	model = MIPModelPtr();
 	closestPoint.clear();
+	closestFrac.clear();
 	closestDist = INFBOUND;
 	hasIncumbent = false;
 }
@@ -229,6 +446,7 @@ void FeasibilityPump::init(MIPModelPtr _model, const std::vector<char>& ctype)
 	DOMINIQS_ASSERT( frac2int );
 	// INIT
 	consoleInfo("[fpInit]");
+
 	reset();
 	model = _model;
 	int n = model->ncols();
@@ -246,9 +464,13 @@ void FeasibilityPump::init(MIPModelPtr _model, const std::vector<char>& ctype)
 	ub.resize(n, 0);
 	xType.resize(n);
 	closestPoint.clear();
+	closestFrac.clear();
 	closestDist = INFBOUND;
 	model->objcoefs(&obj[0]);
+
 	objNorm = sqrt(dotProduct(&obj[0], &obj[0], n));
+	LOG_ITEM("objNorm", objNorm);
+
 	model->lbs(&lb[0]);
 	model->ubs(&ub[0]);
 	model->ctypes(&xType[0]);
@@ -292,11 +514,13 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 	DOMINIQS_ASSERT( frac2int );
 	chrono.start();
 	int n = model->ncols();
+	newlb.resize(n,100000000000.0); /**< new lower bounds */
+	newub.resize(n,-100000000000.0); /**< new upper bounds */
+
 	primalFeas = false;
 	ObjSense origObjSense = model->objSense();
 	double dualBound = -static_cast<int>(origObjSense) * INFBOUND;
-	primalBound = static_cast<int>(origObjSense) * INFBOUND;
-
+	primalBound = static_cast<int>(origObjSense) * INFBOUND;	
 	// setup iteration display
 	display.addColumn("iter", 0, 6);
 	display.addColumn("stage", 1, 6);
@@ -309,6 +533,9 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 	display.addColumn("#flips", 12, 8);
 	display.addColumn("lpiter", 13, 8);
 	display.addColumn("time", 15, 10);
+	display.addColumn("PDLP status", 20, 15);
+	display.addColumn("PDLP feas", 21, 15);
+	display.addColumn("PDLP iter", 25, 15);
 
 	// Ctrl-C handling
 	model->handleCtrlC(true);
@@ -326,6 +553,24 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 		solveInitialLP();
 		if (primalFeas)  dualBound = getSolutionValue(frac_x);
 	}
+	if (rensStage3 || multirensStage3)
+	{
+		for (int j: integers)
+		{	
+			if (equal(frac_x[j], floor(frac_x[j]), integralityEps))
+			{
+				newlb[j] = std::min(newlb[j], floor(frac_x[j]));
+				newub[j] = std::max(newub[j], floor(frac_x[j]));
+			}
+			else 
+			{
+				newlb[j] = std::min(newlb[j], floor(frac_x[j]));
+				newub[j] = std::max(newub[j], ceil(frac_x[j]));
+			}
+		}
+	}
+
+
 	consoleDebug(DebugLevel::Verbose, "startNumFrac = {}", solutionNumFractional(integers, frac_x, integralityEps));
 	consoleLog("");
 
@@ -347,8 +592,11 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 	consoleInfo("[pump]");
 	display.printHeader(std::cout);
 
+	int stage = 1;
 	// stage 1
-	bool found = pumpLoop(runningAlpha, 1);
+	double timeModelS1 = 0.0;
+	double timeModelS2 = 0.0;
+	bool found = pumpLoop(runningAlpha, stage, dualBound, timeModelS1);
 
 	// stage 2 specific setup
 	maxFlipsInRestart = std::max(int(gintegers.size() / 10.0), 10);
@@ -364,16 +612,23 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 		frac_x = closestPoint;
 		primalFeas = false;
 	}
-	closestDist = INFBOUND;
 
 	// stage 2
 	// can skip stage 2 only if we have found a stage-1 solution and there are no general integers
-	if (!found || gintegers.size())  found = pumpLoop(runningAlpha, 2);
-
+	if (!found || gintegers.size())
+	{
+		closestDist = INFBOUND;
+		stage = 2;
+		found = pumpLoop(runningAlpha, stage, dualBound, timeModelS2);
+	}
 	consoleLog("");
 
 	// stage 3
-	if (!found && doStage3)  found = stage3();
+	if (!found && doStage3)
+	{
+		stage = 3;
+		found = stage3();
+	}
 
 	if (found)  foundIncumbent(frac_x, getSolutionValue(frac_x));
 
@@ -390,17 +645,21 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 	consoleInfo("[results]");
 	LOG_ITEM("primalBound", primalBound);
 	LOG_ITEM("dualBound", dualBound);
+	LOG_ITEM("stage", stage);
 	LOG_ITEM("objSense", origObjSense);
 	LOG_ITEM("numSols", (int)found);
 	LOG_ITEM("totalLpTime", lpWatch.getTotal());
 	LOG_ITEM("totalRoundingTime", roundWatch.getTotal());
 	LOG_ITEM("iterations", nitr);
 	LOG_ITEM("rootTime", rootTime);
+	if (analcenterFP) 	LOG_ITEM("acTime", acTime);
 	LOG_ITEM("time", chrono.getTotal());
+	LOG_ITEM("timeModel", timeModelS1 + timeModelS2);
 	LOG_ITEM("firstPerturbation", firstPerturbation);
 	LOG_ITEM("perturbationCnt", pertCnt);
 	LOG_ITEM("restartCnt", restartCnt);
 	LOG_ITEM("walksatCnt", walksatCnt);
+	if (stage == 3) LOG_ITEM("stage3Time", stage3Time);
 	return found;
 }
 
@@ -408,21 +667,36 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 
 void FeasibilityPump::solveInitialLP()
 {
+
+	double timeLeft;
+	if (analcenterFP)
+	{
+		consoleInfo("[computeAC]");
+		int n = model->ncols();
+		ac_x.resize(n, 0);
+		timeLeft = std::max(timeLimit - chrono.getElapsed(), 0.0);
+		model->dblParam(DblParam::TimeLimit, timeLeft);
+		computeAC(ac_x);
+		acTime = chrono.getElapsed();
+	}
+
 	consoleInfo("[initialSolve]");
-	model->logging(true);
-	double timeLeft = std::max(timeLimit - chrono.getElapsed(), 0.0);
+	double elapsedBefore = chrono.getElapsed();
+	timeLeft = std::max(timeLimit - chrono.getElapsed(), 0.0);
 	model->dblParam(DblParam::TimeLimit, timeLeft);
-	model->lpopt(firstOptMethod);
-	rootTime = chrono.getElapsed();
+	double time_model = model->lpopt(firstOptMethod, false, true);
+	rootTime = chrono.getElapsed() - elapsedBefore;
 	int simplexIt = model->intAttr(IntAttr::SimplexIterations);
 	int barrierIt = model->intAttr(IntAttr::BarrierIterations);
+	int pdlpIt = model->intAttr(IntAttr::PDLPIterations);
+
 	rootLpIter = std::max(simplexIt, barrierIt);
 	model->sol(&frac_x[0]);
-	primalFeas = model->isPrimalFeas();
-	model->logging(false);
-	double dualBound = getSolutionValue(frac_x);
-	consoleLog("Initial LP: lpiter={} barit={} time={:.4f} pfeas={} dualbound={:.2f}",
-				simplexIt, barrierIt, rootTime, primalFeas, dualBound);
+	primalFeas = (model->isPrimalFeas() && isSolutionFeasible(frac_x, rows));
+	double dualBound = -static_cast<int>(model->objSense()) * INFBOUND;
+	if (primalFeas) dualBound = getSolutionValue(frac_x);
+	consoleLog("Initial LP: lpiter={} barit={} pdlp={} time={:.4f} pfeas={} dualbound={:.2f}",
+				simplexIt, barrierIt, pdlpIt, rootTime, primalFeas, dualBound);
 }
 
 
@@ -597,15 +871,18 @@ void FeasibilityPump::restart(std::vector<double>& x, bool ignoreGeneralIntegers
 }
 
 
-bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
+bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage, double& dualBound, double& timeModel)
 {
 	// setup
 	lastIntegerX.clear();
+	multipleIntegerX.clear();
+	lastFracX.clear();
 	int n = model->ncols();
 	std::vector<double> distObj(n, 0);
 	std::vector<int> colIndices(n);
 	std::iota(colIndices.begin(), colIndices.end(), 0);
 	int oldIterCnt = nitr;
+	int stageIterLimit = (stage == 1) ? stage1IterLimit : stage2IterLimit;
 	bool ignoreGenerals = (stage == 1) ? true : false;
 	const auto& intSubset = (stage == 1) ? binaries : integers;
 	frac2int->ignoreGeneralIntegers(ignoreGenerals);
@@ -613,25 +890,41 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 	std::vector<std::string> xNames;
 	model->colNames(xNames);
 	int lpIterLimit = -1;
+
+	int iterationsNoImpr = 0;
+	int maxItrNoImpr = (stage == 1) ? itr1NoImpr : itr2NoImpr;
+	bool usedOrigFpNoRestart = false;  // when using multiple reference points, if a cycle occurs use original FP instead of restart
+
 	if (lpIterMult > 0.0)
 	{
 		lpIterLimit = int(rootLpIter * lpIterMult);
 		lpIterLimit = std::max(lpIterLimit, 10);
 	}
+	bool lpfeasible = isSolutionFeasible(frac_x, rows);
+
+	// Disable PdLP warm start in stage 2 because of numerical issues
+	if (stage == 2)
+		model->intParam(IntParam::PdlpWarmStart, 0);
+	
+	timeModel = 0;
 
 	while (!model->aborted()
 		&& ((nitr - oldIterCnt) < stageIterLimit)
 		&& (nitr < iterLimit))
 	{
+		lpfeasible = isSolutionFeasible(frac_x, rows);
+		bool applyPdlpRestart = (!lpfeasible && isSolutionInteger(intSubset, frac_x, integralityEps));
+		// ToDo check the value of primFeas
 		// check if frac_x is feasible (w.r.t. the integer variables in this stage)
-		bool found = (primalFeas && isSolutionInteger(intSubset, frac_x, integralityEps));
-		if (found)
+		bool found = (lpfeasible && isSolutionInteger(intSubset, frac_x, integralityEps));
+		if (found || (stage == 1 && binaries.size() == 0 ))
 		{
 			// update closest point
 			closestDist = 0.0;
 			closestPoint = frac_x;
+			closestFrac = frac_x;
 			// then break this stage
-			break;
+			return true;
 		}
 
 		// global timelimit check
@@ -645,7 +938,33 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 
 		// frac -> int
 		roundWatch.start();
-		frac2int->apply(frac_x, integer_x);
+
+		// If we want to round a convex combination of fractional points instead of the last one
+		if (numFracsObj != 1 ) // aggregate fracs and then round
+		{
+			std::vector<double> frac2round; // convex combination of fractional points
+			frac2round.resize(n, 0);
+			lastFracX.push_front(NumberVector(nitr,frac_x));
+			int numPoints = std::min( numFracsObj, (int) lastFracX.size());
+			//scaleVec contains the barycentric coordinates of the new point
+			std::vector<double> scaleVec;
+			scaleVec = exponDecayVector(fracScaleFactor,numPoints);
+			// get new fractional point
+			aggregateFracs( frac2round, scaleVec);
+			// get rounding
+			frac2int->apply(frac2round,integer_x);		
+		}
+		// get rounding by using AC  
+		else if (analcenterFP) 
+		{
+			double bestgamma;
+			integerFromAC(integer_x, bestgamma, 0.05);
+		}
+		// round the last fractional point
+		else 
+		{	
+			frac2int->apply(frac_x, integer_x);
+		}
 		roundWatch.stop();
 		consoleDebug(DebugLevel::Verbose, "roundingTime = {}", roundWatch.getPartial());
 
@@ -656,82 +975,341 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 			&& equal(runningAlpha, (*(lastIntegerX.begin())).first, alphaDist))
 		{
 			if (!pertCnt)  firstPerturbation = nitr;
-			perturbe(integer_x, ignoreGenerals);
+			// directly apply restart if PDLP stalls at an integer but not primal feasible solution
+			if (!applyPdlpRestart) perturbe(integer_x, ignoreGenerals);
+			else restart(integer_x, ignoreGenerals);
 		}
-		// do a restart until we are able to insert it in the cache
-		for (int rtry = 0; rtry < 10; rtry++)
-		{
-			if (isInCache(runningAlpha, integer_x, ignoreGenerals)) restart(integer_x, ignoreGenerals);
-			else break;
-		}
-		lastIntegerX.push_front(AlphaVector(runningAlpha, integer_x));
+		
 
+		if (isInCache(runningAlpha, integer_x, ignoreGenerals))
+		{
+
+			if ((!usedOrigFpNoRestart) && (numFracsObj != 1))
+			{
+				usedOrigFpNoRestart = true;
+				integer_x.resize(n, 0);
+				frac2int->apply(frac_x, integer_x);
+
+			}
+
+			else if ((!usedOrigFpNoRestart) && (numIntegersObj != 1))
+			{
+				usedOrigFpNoRestart = true;
+			}
+			
+			else
+			{
+				usedOrigFpNoRestart = false;
+				// do a restart until we are able to insert it in the cache
+				for (int rtry = 0; rtry < 10; rtry++)
+				{
+					if (isInCache(runningAlpha, integer_x, ignoreGenerals)) restart(integer_x, ignoreGenerals);
+					else break;
+				}
+				lastIntegerX.push_front(AlphaVector(runningAlpha, integer_x));
+			}
+
+		}
+		else
+		{
+			usedOrigFpNoRestart = false;
+			lastIntegerX.push_front(AlphaVector(runningAlpha, integer_x));
+		}
+		
 		// int -> frac
 		lpWatch.start();
 
 		double thisAlpha = runningAlpha;
+		
+
+		// points to be used in current obj 		
+		int currNumPointsInObj = ((usedOrigFpNoRestart)) ? 1 : std::min((int) lastIntegerX.size(), numIntegersObj);
+
 		// if the distance function is not the pure distance one
 		// then we might not realize the current integer_x is feasible.
 		// so we explictly check for feasibility and, if so,
 		// temporarily set the running alpha to zero.
-		if (isSolutionFeasible(integer_x, rows))  thisAlpha = 0.0;
+		if (isSolutionFeasible(integer_x, rows))  
+		{
+			thisAlpha = 0.0;
+			currNumPointsInObj = 1;
+		}
 
 		// setup distance objective
 		int addedVars = 0;
 		int addedConstrs = 0;
 		std::fill(distObj.begin(), distObj.end(), 0.0);
-		for (int j: binaries)
+
+		// if no score for the integers it is 0 for all
+		double scoreInt = 0.0;
+		if ((bestObjIntegers) || (lessViolatedIntegers))
 		{
-			double fracj = std::min(1.0, std::max(frac_x[j], 0.0)); //< clip fractional value to [0,1]
-			if (isNull(integer_x[j], integralityEps))
+			scoreInt = 0.0;
+			multipleIntegerX.sort();
+
+		}
+		multipleIntegerX.push_front(DistVector(scoreInt, integer_x));
+		if (multipleIntegerX.size() > numIntegersObj) multipleIntegerX.resize(numIntegersObj);
+
+		// iterator over previous integer points
+		std::list<AlphaVector>::const_iterator itrInt = multipleIntegerX.begin();
+		std::list< AlphaVector >::const_iterator itrIntEnd = multipleIntegerX.end();
+		
+		// int currNumPointsInObj = std::min((int) lastIntegerX.size(), numIntegersObj);
+
+		// scales-weights of the integers in the objective
+		std::vector<double> scaleIntVec;
+
+		if (harmonicWeights) scaleIntVec = harmonicVector(currNumPointsInObj);
+		else scaleIntVec = exponDecayVector(intScaleFactor,currNumPointsInObj);
+		// If aggregateInts=False we use a convex combination of distance functions of previous integers as abjoctive in the projection LP. 
+		if (!aggregateInts)
+		{
+			for(int iter = 0; iter < currNumPointsInObj; iter++)
 			{
-				double distCoef = 1.0;
-				if (penaltyObj)  distCoef = 1.0 / std::max(1.0 - fracj, 1e-6);
-				distObj[j] = distCoef;
+				for (int j: binaries)
+				{
+					double distCoef = scaleIntVec[iter];
+					
+					if (isNull(itrInt->second[j], integralityEps))
+					{
+						if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * frac_x[j]);
+						if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * frac_x[j]) / pow(1 + exp(-0.1 * frac_x[j]), 2);
+						distObj[j] += distCoef;
+					}
+					else
+					{
+						if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * ( 1 - frac_x[j] ));
+						if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * ( 1 - frac_x[j])) / pow(1 + exp(-0.1 * (1 - frac_x[j])) , 2);
+						distObj[j] -= distCoef;
+					}
+
+				}
+
+				itrInt++;
+			}
+
+
+			
+			
+			if (stage > 1)
+			{
+				itrInt = multipleIntegerX.begin();
+				for(int iter = 0 ;iter < currNumPointsInObj ; iter++)
+				{
+
+
+					for (int j: gintegers)
+					{		
+						double distCoef = scaleIntVec[iter];
+
+						if (equal(itrInt->second[j], lb[j], integralityEps))
+						{									
+							if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * (frac_x[j] - lb[j]));
+							if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * (frac_x[j] - lb[j])) / pow(1 + exp(-0.1 * (frac_x[j] - lb[j])), 2);
+							distObj[j] += distCoef;
+
+						}
+						else if (equal(itrInt->second[j], ub[j], integralityEps))
+						{
+							if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * (ub[j] - frac_x[j]));
+							if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * (ub[j] - frac_x[j])) / pow(1 + exp(-0.1 * (ub[j] - frac_x[j])) , 2);
+							distObj[j] -= distCoef;							
+						}
+						
+						else
+						{	
+							bool isSame = isComponentSame(j);
+
+							if (isSame)
+							{
+								if (iter == 0)
+								{
+									std::string deltaName = xNames[j] + "_delta_" + std::to_string(iter) ;
+									model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+									int auxIdx = model->ncols() - 1;
+									colIndices.push_back(auxIdx);
+									if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * fabs(frac_x[j] - itrInt->second[j]));
+									if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * fabs(frac_x[j] - itrInt->second[j])) / pow(1 + exp(-0.1 * fabs(frac_x[j] - itrInt->second[j])), 2);
+									
+									distObj.push_back(1.0);
+									addedVars++;
+									// add constraints
+									SparseVector vec;
+									vec.push(j, 1.0);
+									vec.push(auxIdx, -1.0);
+									model->addRow(xNames[j] + "_d1p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'L', itrInt->second[j]);
+									addedConstrs++;
+									vec.coef()[1] = 1.0;
+									model->addRow(xNames[j] + "_d2p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'G', itrInt->second[j]);
+									addedConstrs++;
+
+								}
+								
+							}
+
+
+							else
+							{							
+								// add auxiliary variable
+								std::string deltaName = xNames[j] + "_delta_" + std::to_string(iter) ;
+								model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+								int auxIdx = model->ncols() - 1;
+								colIndices.push_back(auxIdx);
+								if (expObj) distCoef = scaleIntVec[iter] * 0.5 * exp(-0.5 * fabs(frac_x[j] - itrInt->second[j]));
+								if (logisObj) distCoef = scaleIntVec[iter] * 0.1 * exp(-0.1 * fabs(frac_x[j] - itrInt->second[j])) / pow(1 + exp(-0.1 * fabs(frac_x[j] - itrInt->second[j])), 2);
+								
+								distObj.push_back(distCoef);
+								addedVars++;
+								// add constraints
+								SparseVector vec;
+								vec.push(j, 1.0);
+								vec.push(auxIdx, -1.0);
+								model->addRow(xNames[j] + "_d1p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'L', itrInt->second[j]);
+								addedConstrs++;
+								vec.coef()[1] = 1.0;
+								model->addRow(xNames[j] + "_d2p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'G', itrInt->second[j]);
+								addedConstrs++;
+							}						
+						}					
+					}
+
+					itrInt++;
+				}
+
+				consoleDebug(DebugLevel::Verbose, "addedVars={} addedConstrs={}", addedVars, addedConstrs);
+				DOMINIQS_ASSERT( distObj.size() == (unsigned int)(n + addedVars) );
+				DOMINIQS_ASSERT( distObj.size() == colIndices.size() );
+			}
+		}
+		// If aggregateInts=True we use a convex combination of integers as reference in the projection step. 
+		// The resulting point is not an integer, hence it should be rounded.
+		else
+		{
+			
+			std::vector<double> aggr_integers;
+			aggr_integers.resize(n, 0);
+			std::vector<double> new_integer;
+			new_integer.resize(n, 0);
+
+			if (isSolutionFeasible(integer_x, rows))  
+			{
+				new_integer = integer_x;
+				thisAlpha = 0.0;
 			}
 			else
 			{
-				double distCoef = -1.0;
-				if (penaltyObj)  distCoef = -1.0 / std::max(fracj, 1e-6);
-				distObj[j] = distCoef;
-			}
-		}
-		if (stage > 1)
-		{
-			for (int j: gintegers)
-			{
-				// TODO: penalty objective for general integers?
-				if (equal(integer_x[j], lb[j], integralityEps))
-				{
-					distObj[j] = 1.0;
+				itrInt = multipleIntegerX.begin();
+				for(int iter = 0 ;iter < currNumPointsInObj ; iter++)
+				{ 
+					accumulate(&aggr_integers[0], &itrInt->second[0], n, scaleIntVec[iter]);
+					itrInt++;
 				}
-				else if (equal(integer_x[j], ub[j], integralityEps))
+				frac2int->apply(aggr_integers, new_integer);
+				// the new point may be already in cache! 
+				bool sameAsLast = true;
+				bool inCache = false;
+				std::list< AlphaVector >::const_iterator itr = lastIntegerX.begin();
+				std::list< AlphaVector >::const_iterator end = lastIntegerX.end();
+				if (stage == 1)
 				{
-					distObj[j] = -1.0;
+					if (!areSolutionsEqual(binaries, itr->second, new_integer, integralityEps)) 
+					{
+						sameAsLast = false;
+					}
 				}
 				else
 				{
-					// add auxiliary variable
-					std::string deltaName = xNames[j] + "_delta";
-					model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
-					int auxIdx = model->ncols() - 1;
-					colIndices.push_back(auxIdx);
-					distObj.push_back(1.0);
-					addedVars++;
-					// add constraints
-					SparseVector vec;
-					vec.push(j, 1.0);
-					vec.push(auxIdx, -1.0);
-					model->addRow(xNames[j] + "_d1", vec.idx(), vec.coef(), 2, 'L', integer_x[j]);
-					addedConstrs++;
-					vec.coef()[1] = 1.0;
-					model->addRow(xNames[j] + "_d2", vec.idx(), vec.coef(), 2, 'G', integer_x[j]);
-					addedConstrs++;
+					if (!areSolutionsEqual(integers, itr->second, new_integer, integralityEps)) 
+					{
+						sameAsLast = false;
+					}
+				}
+				itr ++; // to ignore first integer
+				if (!sameAsLast)
+				{
+					if (stage == 1)
+					{
+						while ((itr != end) && !inCache)
+						{
+							if ((fabs(thisAlpha - itr->first) < alphaDist) && areSolutionsEqual(binaries, itr->second, new_integer, integralityEps)) inCache = true;
+							++itr;
+						}
+					}
+					else
+					{
+						while ((itr != end) && !inCache)
+						{
+							if ((fabs(thisAlpha - itr->first) < alphaDist) && areSolutionsEqual(integers, itr->second, new_integer, integralityEps)) inCache = true;
+							++itr;
+						}
+					}
+					if (inCache) 
+					{	
+						new_integer = integer_x;
+					}
+					else if (isSolutionFeasible(new_integer, rows))  
+					{
+						thisAlpha = 0.0;
+					}
+
+				}
+
+			}
+			
+
+			for (int j: binaries)
+			{
+				if (isNull(new_integer[j], integralityEps))
+				{
+					double distCoef = 1.0;
+					distObj[j] = distCoef;
+				}
+				else
+				{
+					double distCoef = -1.0;
+					distObj[j] = distCoef;
 				}
 			}
-			consoleDebug(DebugLevel::Verbose, "addedVars={} addedConstrs={}", addedVars, addedConstrs);
-			DOMINIQS_ASSERT( distObj.size() == (unsigned int)(n + addedVars) );
-			DOMINIQS_ASSERT( distObj.size() == colIndices.size() );
+
+
+			if (stage > 1)
+			{
+				for (int j: gintegers)
+				{
+					if (equal(new_integer[j], lb[j], integralityEps))
+					{
+						distObj[j] = 1.0;
+					}
+					else if (equal(new_integer[j], ub[j], integralityEps))
+					{
+						distObj[j] = -1.0;
+					}
+					else
+					{
+						// add auxiliary variable
+						std::string deltaName = xNames[j] + "_delta";
+						model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+						int auxIdx = model->ncols() - 1;
+						colIndices.push_back(auxIdx);
+						distObj.push_back(1.0);
+						addedVars++;
+						// add constraints
+						SparseVector vec;
+						vec.push(j, 1.0);
+						vec.push(auxIdx, -1.0);
+						model->addRow(xNames[j] + "_d1", vec.idx(), vec.coef(), 2, 'L', new_integer[j]);
+						addedConstrs++;
+						vec.coef()[1] = 1.0;
+						model->addRow(xNames[j] + "_d2", vec.idx(), vec.coef(), 2, 'G', new_integer[j]);
+						addedConstrs++;
+					}
+				}
+
+				consoleDebug(DebugLevel::Verbose, "addedVars={} addedConstrs={}", addedVars, addedConstrs);
+				DOMINIQS_ASSERT( distObj.size() == (unsigned int)(n + addedVars) );
+				DOMINIQS_ASSERT( distObj.size() == colIndices.size() );
+			}
 		}
 
 		// randomize distance coefficients
@@ -747,35 +1325,109 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 		// objective FP
 		if (thisAlpha > 0.0)
 		{
-			// compute distance norm and scale distance objective by (1-thisAlpha)
-			double distNorm = 0.0;
+
+			double distScale = 0.0;
+			double objScale = 0.0;
+
+			if (newScaleC)
+			{
+				// scale by the objective value of the current LP solution
+				objScale = dotProduct(&obj[0], &frac_x[0], n) + objOffset;
+				objScale = fabs(objScale);
+			}
+
+			// else scale as normal by the l2 norm of the objective vector
+			else objScale = objNorm;
+
+			if (newScaleDelta)
+			{	
+				itrInt = multipleIntegerX.begin();
+				for (int iter = 0; iter < currNumPointsInObj; iter++)
+				{
+					distScale += scaleIntVec[iter] * solutionsDistance(intSubset, frac_x, itrInt->second);
+					itrInt++;
+				}
+			}
+
+			else
+			{	
+				// distScale = sqrt(intSubset.size());
+				distScale = sqrt(dotProduct(&distObj[0], &distObj[0], (int) distObj.size()));
+			}
+
+			// scale distance objective by (1-thisAlpha)
 			for (int j = 0; j < (n + addedVars); j++)
 			{
-				distNorm += (distObj[j]*distObj[j]);
 				distObj[j] *= (1.0 - thisAlpha);
+			}	
+
+			if (isNull(objScale))
+			{
+				objScale = 1.0;
 			}
-			distNorm = sqrt(distNorm) * (1.0 - thisAlpha);
 
+			if (isNull(distScale))
+			{
+				distScale = 1.0;
+			}
 			// add objective with proper weight
-			double weight = (thisAlpha * distNorm) / objNorm;
+			double weight = (thisAlpha * distScale) / objScale;
 			accumulate(&distObj[0], &obj[0], n, weight);
+		
 		}
-
 		// set objective
 		model->objcoefs(colIndices.size(), &colIndices[0], &distObj[0]);
 
 		// solve LP
 		if (lpIterLimit > 0)  model->intParam(IntParam::IterLimit, lpIterLimit);
 		model->dblParam(DblParam::TimeLimit, timeLeft);
-		model->lpopt(reOptMethod);
+		timeModel += model->lpopt(reOptMethod, false, false);
 		lpWatch.stop();
 
-		// get solution
-		model->sol(&frac_x[0], 0, n-1);
+		// if no solution is found because of timeLeft return false
 		primalFeas = model->isPrimalFeas();
-		consoleDebug(DebugLevel::VeryVerbose, "Iteration {}: time={} pFeas={} lpiter={}",
-				lpWatch.getPartial(), primalFeas, model->intAttr(IntAttr::SimplexIterations));
+		if (primalFeas)
+		{
+			// get solution
+			model->sol(&frac_x[0], 0, n-1);
+			// try to tighten the tolerance for pdlp
+			while (pdlpTol > 1e-6 && !isSolutionFeasible(frac_x, rows) && isSolutionInteger(intSubset, frac_x, integralityEps))
+			{
+				pdlpTol *= 0.1;
+				/* decrease the tolerance for pdlp */
+				timeModel += model->lpopt(reOptMethod, true, false);
+				if(model->isPrimalFeas())
+					model->sol(&frac_x[0], 0, n-1);
+				else
+					break;
+			}
+		}
+		if (!primalFeas) 
+		{
+			// if lpopt was interrupted because of the timelimit postsolve the model manually and exit the current stage
+			model->postsolve();
+			// cleanup added vars and constraints
+			if (addedConstrs)
+			{
+				int begin = model->nrows() - addedConstrs;
+				model->delRows(begin, begin + addedConstrs - 1);
+			}
+			if (addedVars)
+			{
+				int begin = model->ncols() - addedVars;
+				model->delCols(begin, begin + addedVars - 1);
+			}
+			colIndices.resize(n);
+			distObj.resize(n);
+			DOMINIQS_ASSERT( model->ncols() == n );
+			return false;
+		}
+		consoleDebug(DebugLevel::VeryVerbose, "Iteration {}: time={} pFeas={} lpiter={} pdlp={}",
+				lpWatch.getPartial(), primalFeas, model->intAttr(IntAttr::SimplexIterations), model->intAttr(IntAttr::PDLPIterations));
 		double projObj = model->objval();
+
+		dominiqs::StopWatch chronoDelRows;
+		chronoDelRows.start();
 
 		// cleanup added vars and constraints
 		if (addedConstrs)
@@ -788,6 +1440,10 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 			int begin = model->ncols() - addedVars;
 			model->delCols(begin, begin + addedVars - 1);
 		}
+		
+		chronoDelRows.stop();
+		timeModel += chronoDelRows.getElapsed();
+
 		colIndices.resize(n);
 		distObj.resize(n);
 		DOMINIQS_ASSERT( model->ncols() == n );
@@ -796,19 +1452,163 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 		double origObj = dotProduct(&obj[0], &frac_x[0], n) + objOffset;
 		double dist = solutionsDistance(intSubset, frac_x, integer_x);
 		int numFrac = solutionNumFractional(intSubset, frac_x, integralityEps);
-
-		// save integer_x as best point if distance decreased
-		if (dist < closestDist)
+		
+		if (lessViolatedIntegers)
 		{
-			closestDist = dist;
-			closestPoint = integer_x;
+			std::list<AlphaVector>::iterator itrIntegers = multipleIntegerX.begin();
+			std::vector<double> integer_afterProj;
+			integer_afterProj = frac_x;
+			for (int j: integers) integer_afterProj[j] = integer_x[j];
+			double intViolation = 0.0;
+			for (auto c: rows) 
+			{	
+				intViolation += std::max(0.0, c->violation(&integer_afterProj[0]));
+			}
+			itrIntegers->first = intViolation;
+			if (bestObjIntegers) 
+			{
+				double objOfInt = dotProduct(&obj[0], &integer_afterProj[0], n) + objOffset;
+				if ( objOfInt > 0 ) itrIntegers->first = intViolation * objOfInt;
+				else if ( objOfInt == 0 ) itrIntegers->first = intViolation;
+				else itrIntegers->first = (1.0 / (1.0 + intViolation)) * objOfInt;
+			}
+			else itrIntegers->first = intViolation;
+
+		}
+		if (lessDistanceIntegers)
+		{
+			std::list<AlphaVector>::iterator itrIntegers = multipleIntegerX.begin();
+			if (bestObjIntegers) itrIntegers->first = dist*(dotProduct(&obj[0], &integer_x[0], n)+ objOffset);
+			else itrIntegers->first = dist;
 		}
 
+		if (multirensStage3)
+		{
+			for (int j: integers)
+			{	
+				if (equal(frac_x[j], floor(frac_x[j]), integralityEps))
+				{
+					newlb[j] = std::min(newlb[j], floor(frac_x[j]));
+					newub[j] = std::max(newub[j], floor(frac_x[j]));
+				}
+				else 
+				{
+					newlb[j] = std::min(newlb[j], floor(frac_x[j]));
+					newub[j] = std::max(newub[j], ceil(frac_x[j]));
+				}
+			}
+		}
+		// get best integer cache for stage 3 based on score
+		if (newStage3)
+		{	
+			double scoreIntS3 = 0.0;
+			// if ((stage3bestObjIntegers) && (stage3lessViolatedIntegers))
+			// {
+			// 	// how much does the integer violate the constraints?
+			// 	for (auto c: rows) 
+			// 	{	
+			// 		scoreIntS3 += std::max(0.0, c->violation(&integer_x[0]));
+			// 	}
+			// 	scoreIntS3 *= (dotProduct(&obj[0], &integer_x[0], n) + objOffset);
+
+			// }
+			if (stage3lessViolatedIntegers)
+			{
+				std::vector<double> integer_afterProj;
+				integer_afterProj = frac_x;
+				for (int j: integers) integer_afterProj[j] = integer_x[j];
+				// how much does the integer violate the constraints?
+				for (auto c: rows) 
+				{	
+					scoreIntS3 += std::max(0.0, c->violation(&integer_afterProj[0]));
+				}
+				if (stage3bestObjIntegers)
+				{
+					double objOfInt = dotProduct(&obj[0], &integer_afterProj[0], n) + objOffset;
+					if ( objOfInt > 0 ) scoreIntS3 *= objOfInt;
+					else if ( objOfInt < 0 ) scoreIntS3 = (1.0 / (1.0 + scoreIntS3)) * objOfInt;
+				}
+			}
+			else
+			{
+				scoreIntS3 = dist;
+				if (stage3bestObjIntegers)
+				{
+
+					std::vector<double> integer_afterProj;
+					integer_afterProj = frac_x;
+					for (int j: integers) integer_afterProj[j] = integer_x[j];
+					double currentObjValue = getSolutionValue(integer_afterProj);
+					scoreIntS3 *= (1 + abs(currentObjValue - dualBound));
+				}
+
+			}
+			std::list<DistVector> *p;
+
+			if (stage == 1) p = &closestIntegerXs1;
+			else p = &closestIntegerXs2;
+
+			std::list< DistVector >::const_iterator itr_cl = p->begin();
+			std::list< DistVector >::const_iterator end_cl = p->end();
+			
+			bool pointAdded = false;
+			while ((itr_cl != end_cl))
+			{	
+
+				if (lessEqualThan(scoreIntS3, itr_cl->first))
+				{	
+					pointAdded = true;
+					p->insert(itr_cl,DistVector(scoreIntS3, integer_x));
+					break;
+				}
+				itr_cl++;
+			}
+			if ((p->size() < stage3IntegersObj) && (!pointAdded)) 
+			{
+				p->push_back(DistVector(scoreIntS3, integer_x));
+			}	
+			if (p->size() > stage3IntegersObj) p->resize(stage3IntegersObj);
+		}
+
+
+
+		// save integer_x as best point if distance decreased and count number of itr without 10% improvement
+		if (dist < closestDist)
+		{
+			// if 10% improvenent set iterationsNoImpr = 0
+			if( dist / closestDist < 0.9) iterationsNoImpr = 0;
+			closestDist = dist;
+			closestPoint = integer_x;
+			closestFrac = frac_x;
+		}
+		
+		else iterationsNoImpr ++;
+
+
+		//break loop if too many iterations without 10% improvement
+		if( iterationsNoImpr > maxItrNoImpr )
+		{
+			std::cout << "Too many iterations without 10% improvement" << std::endl;
+			break;
+		}
+		
+		// ToDo this check is done twice per iteration. Remove one.
+		lpfeasible = isSolutionFeasible(frac_x, rows);
+		if (lpfeasible) 
+		{	
+			// For PDLP this is just the best known LP solution value and not the dual bound
+			if (dualBound == -static_cast<int>(model->objSense()) * INFBOUND) dualBound = origObj;
+			if (model->objSense() == ObjSense::MIN) dualBound = std::min(dualBound, origObj);
+			else dualBound = std::max(dualBound, origObj);
+		}
 		// display log
 		if (display.needPrint(nitr))
 		{
+			std::string reason;
+			model->terminationReason(reason);
 			int simplexIt = model->intAttr(IntAttr::SimplexIterations);
 			int barrierIt = model->intAttr(IntAttr::BarrierIterations);
+			int pdlpIt = model->intAttr(IntAttr::PDLPIterations);
 			display.set("stage", stage);
 			display.set("iter", nitr);
 			display.set("alpha", runningAlpha);
@@ -818,6 +1618,9 @@ bool FeasibilityPump::pumpLoop(double& runningAlpha, int stage)
 			display.set("#frac", numFrac);
 			display.set("projObj", projObj);
 			display.set("lpiter", std::max(simplexIt, barrierIt));
+			display.set("PDLP status", reason);
+			display.set("PDLP feas", lpfeasible);
+			display.set("PDLP iter", pdlpIt);
 			display.printIteration(std::cout);
 		}
 
@@ -837,11 +1640,11 @@ bool FeasibilityPump::stage3()
 	consoleInfo("[stage3]");
 	double elapsedTime = chrono.getElapsed();
 	double remainingTime = timeLimit - elapsedTime;
-	double s3TimeLimit = std::max(std::min(remainingTime, elapsedTime), 1.0);
+	// double s3TimeLimit = std::max(std::min(remainingTime, elapsedTime), 1.0);
+	double s3TimeLimit = std::max(remainingTime, 1.0);
 	if (lessThan(remainingTime, 0.1)) return false;
 
-	consoleLog("Starting stage3 from point with distance={} [timeLimit={}]", closestDist, s3TimeLimit);
-
+	model->switchToMIP();
 	int n = model->ncols();
 	bool found = false;
 	std::vector<std::string> xNames;
@@ -853,51 +1656,254 @@ bool FeasibilityPump::stage3()
 	for (int j: gintegers) ctype[j] = 'I';
 	for (int j = 0; j < n; j++)  model->ctype(j, ctype[j]);
 
-	// load best point and generate objective
-	integer_x = closestPoint;
 	int addedVars = 0;
 	int addedConstrs = 0;
 	std::vector<double> distObj(n, 0.0);
 	std::vector<int> colIndices(n);
 	std::iota(colIndices.begin(), colIndices.end(), 0);
-	for (int j: binaries) distObj[j] = (isNull(integer_x[j], integralityEps) ? 1.0 : 1.0);
-	for (int j: gintegers)
+
+	if ( rensClosestDistStage3 )
 	{
-		if (equal(integer_x[j], lb[j], integralityEps)) distObj[j] = 1.0;
-		else if (equal(integer_x[j], ub[j], integralityEps)) distObj[j] = -1.0;
-		else
-		{
-			// add auxiliary variable
-			std::string deltaName = xNames[j] + "_delta";
-			model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
-			int auxIdx = model->ncols() - 1;
-			colIndices.push_back(auxIdx);
-			distObj.push_back(1.0);
-			addedVars++;
-			// add constraints
-			SparseVector vec;
-			vec.push(j, 1.0);
-			vec.push(auxIdx, -1.0);
-			model->addRow(xNames[j] + "_d1", vec.idx(), vec.coef(), 2, 'L', integer_x[j]);
-			addedConstrs++;
-			vec.coef()[1] = 1.0;
-			model->addRow(xNames[j] + "_d2", vec.idx(), vec.coef(), 2, 'G', integer_x[j]);
-			addedConstrs++;
+		for (int j: integers)
+		{	
+			if (equal(closestFrac[j], floor(closestFrac[j]), integralityEps))
+			{
+				newlb[j] = std::min(newlb[j], floor(closestFrac[j]));
+				newub[j] = std::max(newub[j], floor(closestFrac[j]));
+			}
+			else 
+			{
+				newlb[j] = std::min(newlb[j], floor(closestFrac[j]));
+				newub[j] = std::max(newub[j], ceil(closestFrac[j]));
+			}
 		}
 	}
+	if ( rensStage3 || multirensStage3 || rensClosestDistStage3 )
+	{
+		int changedBoundsBins = 0;
+		int changedBoundsInts = 0;
+		int FixedInts = 0;
+
+		for (int j: binaries)
+		{	
+			if ( (newlb[j] == newub[j]) )
+			{	
+				model->lb(j,newlb[j]);
+				model->ub(j,newub[j]);
+				changedBoundsBins +=1;
+			}	
+		}
+
+		for (int j: gintegers)
+		{	
+			if ( (newub[j] - newlb[j]) < (ub[j] - lb[j]) )
+			{		
+					model->lb(j,newlb[j]);
+					model->ub(j,newub[j]);
+					changedBoundsInts +=1;
+					if ( newub[j] == newlb[j] ) FixedInts += 1;
+			}
+		}
+		std::cout << "Out of " << binaries.size() << " binary variables " << changedBoundsBins << " changed bounds" << std::endl;
+		std::cout << "Out of " << gintegers.size() << " integer variables " << changedBoundsInts << " changed bounds" << std::endl;
+		std::cout << "Out of " << gintegers.size() << " integer variables " << FixedInts << " were fixed" << std::endl;
+
+
+	}
+
+
+	if (rensClosestDistStage3)
+	{
+		consoleLog("rens closest point stage3");
+	}
+	else if (normalMIPStage3)
+	{
+		consoleLog("solve normal MIP stage3");
+	}
+	else if (rensStage3)
+	{
+		consoleLog("RENS stage3");
+
+	}
+	else if (multirensStage3)
+	{
+		consoleLog("Multi-RENS stage3");
+	}
+
+	else if (!newStage3)
+	{
+		// load best point and generate objective
+		integer_x = closestPoint;
+
+		consoleLog("Starting stage3 from point with distance={} [timeLimit={}]", closestDist, s3TimeLimit);
+
+		for (int j: binaries) distObj[j] = (isNull(integer_x[j], integralityEps) ? 1.0 : -1.0);
+		for (int j: gintegers)
+		{
+			if (equal(integer_x[j], lb[j], integralityEps)) distObj[j] = 1.0;
+			else if (equal(integer_x[j], ub[j], integralityEps)) distObj[j] = -1.0;
+			else
+			{
+				// add auxiliary variable
+				std::string deltaName = xNames[j] + "_delta";
+				model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+				int auxIdx = model->ncols() - 1;
+				colIndices.push_back(auxIdx);
+				distObj.push_back(1.0);
+				addedVars++;
+				// add constraints
+				SparseVector vec;
+				vec.push(j, 1.0);
+				vec.push(auxIdx, -1.0);
+				model->addRow(xNames[j] + "_d1", vec.idx(), vec.coef(), 2, 'L', integer_x[j]);
+				addedConstrs++;
+				vec.coef()[1] = 1.0;
+				model->addRow(xNames[j] + "_d2", vec.idx(), vec.coef(), 2, 'G', integer_x[j]);
+				addedConstrs++;
+			}
+		}
+	}
+
+	if (newStage3)
+	{	
+
+		std::list<DistVector> *p;
+
+		if (closestIntegerXs2.size() >= 1) p = &closestIntegerXs2;
+		else p = &closestIntegerXs1;
+
+
+		std::list<DistVector>::const_iterator itrInt = p->begin();
+		std::list< DistVector >::const_iterator itrInt_end = p->end();
+
+		// scales-weights of the integers in the objective
+		std::vector<double> scaleIntVec;
+
+
+		int currNumPointsInObj = (int) p->size();
+
+		consoleLog("Starting stage3 from {} closest points to LP [timeLimit={}] ", currNumPointsInObj, s3TimeLimit);
+
+		if (stage3harmonicWeights) scaleIntVec = harmonicVector(currNumPointsInObj);
+		else scaleIntVec = exponDecayVector(stage3ScaleFactor,currNumPointsInObj);
+
+		for(int iter = 0; iter < currNumPointsInObj; iter++)
+		{
+			for (int j: binaries)
+			{
+				if (isNull(itrInt->second[j], integralityEps))
+				{
+					distObj[j] += scaleIntVec[iter];
+				}
+				else
+				{
+					distObj[j] += -scaleIntVec[iter];
+				}
+
+			}
+
+			itrInt++;
+		}
+
+		itrInt = p->begin();
+		for(int iter = 0 ;iter < currNumPointsInObj ; iter++)
+		{
+			for (int j: gintegers)
+			{
+
+				// TODO: penalty objective for general integers?
+				if (equal(itrInt->second[j], lb[j], integralityEps))
+				{
+					distObj[j] += scaleIntVec[iter];
+				}
+				else if (equal(itrInt->second[j], ub[j], integralityEps))
+				{
+					distObj[j] += -scaleIntVec[iter];
+				}
+				
+				else
+				{
+					bool isSame = isComponentSameS3(j);
+					if (isSame)
+					{	
+						if (iter == 0)
+						{
+							// add auxiliary variable
+							std::string deltaName = xNames[j] + "_deltaS3_" + std::to_string(iter) ;
+							model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+							int auxIdx = model->ncols() - 1;
+							colIndices.push_back(auxIdx);
+							distObj.push_back(1.0);
+							addedVars++;
+							// add constraints
+							SparseVector vec;
+							vec.push(j, 1.0);
+							vec.push(auxIdx, -1.0);
+							model->addRow(xNames[j] + "_d1p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'L', itrInt->second[j]);
+							addedConstrs++;
+							vec.coef()[1] = 1.0;
+							model->addRow(xNames[j] + "_d2p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'G', itrInt->second[j]);
+							addedConstrs++;
+						}
+					}
+					else
+					{
+						// add auxiliary variable
+						std::string deltaName = xNames[j] + "_deltaS3_" + std::to_string(iter) ;
+						model->addEmptyCol(deltaName, 'C', 0.0, INFBOUND, 0.0);
+						int auxIdx = model->ncols() - 1;
+						colIndices.push_back(auxIdx);
+						distObj.push_back(scaleIntVec[iter]);
+						addedVars++;
+						// add constraints
+						SparseVector vec;
+						vec.push(j, 1.0);
+						vec.push(auxIdx, -1.0);
+						model->addRow(xNames[j] + "_d1p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'L', itrInt->second[j]);
+						addedConstrs++;
+						vec.coef()[1] = 1.0;
+						model->addRow(xNames[j] + "_d2p" + std::to_string(iter) , vec.idx(), vec.coef(), 2, 'G', itrInt->second[j]);
+						addedConstrs++;
+					}
+					
+				}
+			}
+			itrInt++;
+		}
+	}
+
+
+
+	LOG_ITEM("addedVars", addedVars);
+	LOG_ITEM("addedConstrs", addedConstrs);
+
 	consoleDebug(DebugLevel::Normal, "addedVars={} addedConstrs={}", addedVars, addedConstrs);
 	DOMINIQS_ASSERT( distObj.size() == (unsigned int)(n + addedVars) );
 	DOMINIQS_ASSERT( distObj.size() == colIndices.size() );
-	model->objcoefs(colIndices.size(), &colIndices[0], &distObj[0]);
 
+	if (normalMIPStage3) model->objcoefs(colIndices.size(), &colIndices[0], &obj[0]);
+	else if (newStage3 && (multirensStage3 || rensClosestDistStage3)) model->objcoefs(colIndices.size(), &colIndices[0], &distObj[0]);
+	else if ( rensStage3 || multirensStage3 || rensClosestDistStage3) model->objcoefs(colIndices.size(), &colIndices[0], &obj[0]);
+	else model->objcoefs(colIndices.size(), &colIndices[0], &distObj[0]);
+
+	// model->writeModel(std::to_string(binaries.size())+".lp", "lp");
 	model->logging(true);
 	model->intParam(IntParam::SolutionLimit, 1);
-	model->dblParam(DblParam::TimeLimit, timeLimit);
+	model->intParam(IntParam::NodeLimit, 500);
+	model->dblParam(DblParam::TimeLimit, s3TimeLimit);
+	elapsedTime = chrono.getElapsed();
 	model->mipopt();
+	stage3Time = chrono.getElapsed() - elapsedTime;
 	primalFeas = model->isPrimalFeas();
+
 	model->logging(false);
+
+	// postsolve the problem since it may still be presolved!
+	model->postsolve();
+
 	if (primalFeas)
 	{
+
 		model->sol(&frac_x[0], 0, n-1);
 		DOMINIQS_ASSERT( isSolutionInteger(integers, frac_x, integralityEps) );
 		found = true;
@@ -961,7 +1967,8 @@ void FeasibilityPump::infeasibleSupport(const std::vector<double>& x, std::set<i
 		// find set of infeasible constraints
 		std::set<int> infeas;
 		int m = model->nrows();
-		for (int i = 0; i < m; i++) {
+		// ToDo check value of nrows() in all stages of feaspump
+		for (int i = 0; i < rows.size(); i++) {
 			ConstraintPtr c = rows[i];
 			if (!c->satisfiedBy(&x[0])) infeas.insert(i);
 		}
@@ -978,6 +1985,125 @@ void FeasibilityPump::infeasibleSupport(const std::vector<double>& x, std::set<i
 			}
 		}
 	}
+}
+void FeasibilityPump::aggregateFracs( std::vector<double>& aggr_frac_x, std::vector<double>& scaleVector)
+{
+	// iterator over fractional point
+	std::list< NumberVector >::const_iterator itr = lastFracX.begin();
+	std::list< NumberVector >::const_iterator end = lastFracX.end();
+	// number of points used to compute aggr_frac_x
+	int numPoints = scaleVector.size();
+
+	for (int i = 0; i < aggr_frac_x.size(); i++)
+	{
+		int curr = 0;
+		while (curr < numPoints)
+		{
+			aggr_frac_x[i] += (itr->second[i])*scaleVector[curr];
+			curr ++;
+			itr ++;
+		}
+		itr = lastFracX.begin();
+	}
+}
+
+void FeasibilityPump::computeAC(std::vector<double>& ac_x)
+{
+	int n = model->ncols();
+	std::vector<double> OrigObj(n, 0);
+	std::vector<double> EmptyObj(n, 0);
+	std::vector<int> colIndices(n);
+	std::iota(colIndices.begin(), colIndices.end(), 0);
+	// get original objective
+	model->objcoefs(&OrigObj[0]);
+	// remove original objective
+	model->objcoefs(colIndices.size(), &colIndices[0], &EmptyObj[0]);
+	// compute AC
+	model->lpopt('A', false, false);
+	model->sol(&ac_x[0]);
+	DOMINIQS_ASSERT(model->isPrimalFeas());
+	// add original objective again
+	model->objcoefs(colIndices.size(), &colIndices[0], &OrigObj[0]);
+}
+
+void FeasibilityPump::integerFromAC(std::vector<double>& x, double& bestgamma, double step)
+{		
+		// currentFrac obtained by (1.0 - gamma) * frac_x + gamma * ac_x
+		int n = model->ncols();
+		std::vector<double> currentFrac(n, 0);
+		std::vector<double> currentInt(n, 0);
+
+		double smallestViolation = INFBOUND;
+		double intViolation = 0.0;
+
+		for (double gamma = 0.0; gamma < (1+integralityEps); gamma = gamma + step)
+	    {	
+			for (int i = 0; i < n; i++) currentFrac[i] = (1.0 - gamma) * frac_x[i] + gamma * ac_x[i];
+			frac2int->apply(currentFrac, currentInt);
+			if (isSolutionFeasible(currentInt, rows)) 
+			{	
+				for (int i = 0; i < n; i++) x[i] = currentInt[i]; 
+				bestgamma = gamma;
+				std::cout << "AC-FP found a solution with gamma: "<< gamma << std::endl;
+				return;
+			}
+
+			else
+			{	
+				// compute total constraint violation for the current integer point
+				intViolation = 0.0;
+				for (auto c: rows) 
+				{	
+					intViolation = std::max(intViolation, c->violation(&currentInt[0]));
+				}
+				// choose integer with the smallest total constraint violation
+				if (intViolation < smallestViolation)
+				{
+					smallestViolation = intViolation;
+					bestgamma = gamma;
+					for (int i = 0; i < n; i++) x[i] = currentInt[i]; 
+				}
+			}
+		}
+		std::cout << bestgamma << std::endl;
+
+}
+
+bool FeasibilityPump::isComponentSame(int idx)
+{
+	bool isSame = true;
+	// iterator over reference integer points
+	std::list<AlphaVector>::const_iterator itrInt = multipleIntegerX.begin();
+	std::list< AlphaVector >::const_iterator itrIntEnd = multipleIntegerX.end();
+	double value =  itrInt->second[idx];
+	while ((itrInt != itrIntEnd) && isSame)
+	{
+		if ( itrInt->second[idx] != value ) isSame = false;
+		++itrInt;
+
+	}
+	return isSame;
+}
+
+bool FeasibilityPump::isComponentSameS3(int idx)
+{
+	bool isSame = true;
+	std::list<DistVector> *p;
+
+	if (closestIntegerXs2.size() >= 1) p = &closestIntegerXs2;
+	else p = &closestIntegerXs1;
+
+
+	std::list<DistVector>::const_iterator itrInt = p->begin();
+	std::list< DistVector >::const_iterator itrIntEnd = p->end();
+	double value =  itrInt->second[idx];
+	while ((itrInt != itrIntEnd) && isSame)
+	{
+		if ( itrInt->second[idx] != value ) isSame = false;
+		++itrInt;
+
+	}
+	return isSame;
 }
 
 } // namespace dominiqs

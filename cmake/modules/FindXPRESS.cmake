@@ -3,9 +3,9 @@
 # Users might need to set/overwrite XPRESSDIR
 
 # Find XPRESS headers and library
-find_path(XPRESS_INCLUDE_DIR "xprs.h" PATHS ${XPRESSDIR}/include)
-find_library(XPRESS_LIBRARY NAMES "xprs" PATHS ${XPRESSDIR}/lib)
-find_library(XPRESS_XPRL_LIBRARY NAMES "xprl" PATHS ${XPRESSDIR}/lib)
+find_path(XPRESS_INCLUDE_DIR "xprs.h" PATHS $ENV{XPRESSDIR}/include)
+find_library(XPRESS_LIBRARY NAMES "xprs" PATHS $ENV{XPRESSDIR}/lib)
+find_library(XPRESS_XPRL_LIBRARY NAMES "xprl" PATHS $ENV{XPRESSDIR}/lib)
 
 mark_as_advanced(XPRESS_INCLUDE_DIR XPRESS_LIBRARY)
 

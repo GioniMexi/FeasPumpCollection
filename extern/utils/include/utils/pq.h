@@ -3,6 +3,7 @@
  * @brief Priority Queue for a set of integers
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
  * Copyright 2014 Domenico Salvagnin
  */
 

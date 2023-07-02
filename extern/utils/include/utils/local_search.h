@@ -3,6 +3,7 @@
  * @brief Local search based metaheuristics: LS, ILS and RRLS
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
  * Copyright 2018 Domenico Salvagnin
  */
 

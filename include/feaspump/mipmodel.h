@@ -3,7 +3,8 @@
  * @brief MIP Model Interface
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
- * 2019
+ * @author Gioni Mexi <gionimexi at gmail dot com>
+ * 2023
  */
 
 #ifndef MIPMODEL_H
@@ -26,14 +27,17 @@ enum class IntParam {
 	Threads,
 	SolutionLimit,
 	NodeLimit,
-	IterLimit
+	IterLimit,
+	PdlpWarmStart
 };
 
 
 enum class DblParam {
 	TimeLimit,
 	FeasibilityTolerance,
-	IntegralityTolerance
+	IntegralityTolerance,
+	PdlpTolerance,
+	PdlpToleranceDecreaseFactor
 };
 
 
@@ -41,7 +45,8 @@ enum class IntAttr {
 	Nodes,
 	NodesLeft,
 	BarrierIterations,
-	SimplexIterations
+	SimplexIterations,
+	PDLPIterations
 };
 
 
@@ -61,7 +66,7 @@ public:
 	virtual void writeModel(const std::string& filename, const std::string& format="") const = 0;
 	virtual void writeSol(const std::string& filename) const = 0;
 	/* Solve */
-	virtual void lpopt(char method) = 0;
+	virtual double lpopt(char method, bool decrease_tol, bool initial) = 0;
 	virtual void mipopt() = 0;
 	/* Presolve/Postsolve */
 	virtual void presolve() = 0;
@@ -83,6 +88,7 @@ public:
 	virtual void dblParam(DblParam which, double value) = 0;
 	virtual int intAttr(IntAttr which) const = 0;
 	virtual double dblAttr(DblAttr which) const = 0;
+	virtual void terminationReason(std::string& reason) = 0;
 	/* Access model data */
 	virtual int nrows() const = 0;
 	virtual int ncols() const = 0;
@@ -121,6 +127,7 @@ public:
 	virtual void ctype(int cidx, char val) = 0;
 	virtual void ctypes(int cnt, const int* cols, const char* values) = 0;
 	virtual void switchToLP() = 0;
+	virtual void switchToMIP() = 0;
 private:
 	virtual MIPModelI* clone_impl() const = 0;
 	virtual MIPModelI* presolvedmodel_impl() = 0;

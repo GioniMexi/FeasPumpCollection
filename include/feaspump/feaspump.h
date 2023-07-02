@@ -3,6 +3,7 @@
  * @brief Feasibility Pump algorithm Header
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
  * 2008
  */
 
@@ -54,7 +55,8 @@ private:
 	double timeLimit;
 	double timeMult;
 	double lpIterMult;
-	int stageIterLimit;
+	int stage1IterLimit;
+	int stage2IterLimit;
 	int iterLimit;
 	int avgFlips;
 	double integralityEps;
@@ -66,6 +68,44 @@ private:
 	bool walksatPerturbe;
 	bool randomizeLP;
 	bool penaltyObj;
+
+	// new parameters
+ 	int itr1NoImpr; 	// max iterations without 10% improvent in stage 1
+	int itr2NoImpr;		// max iterations without 10% improvent in stage 2
+	bool expObj;
+	bool logisObj;
+	bool analcenterFP;
+
+	bool newScaleC;	// new scaling for c in the obj fp
+	bool newScaleDelta;	// new scaling for Delta in the obj fp
+
+	int numIntegersObj;	// number of integer points used in obj
+	bool aggregateInts; // accumulate integer points before creating objective (not good)
+	int numFracsObj;    // number of fractional points used (not good)
+	double fracScaleFactor; // scaling factor for multiple fractional points in objective
+	double intScaleFactor; // scaling factor for multiple integer points in objective
+	bool lessViolatedIntegers; // pick reference points with smallest violation of constraints
+	bool lessDistanceIntegers; // pick reference points with smallest distance to projection LP solution
+	bool bestObjIntegers; // pick reference points with best objective
+	bool harmonicWeights; // harmonic weights for multiple integers
+	bool exponDecayWeights; // exponential decay weights for multiple integers -> with factor intScaleFactor, e.g. 0.5
+
+	bool normalMIPStage3;  // just solves the normal mip in stage 3 (for comparison purposes)
+	bool newStage3;  // use more integers in stage 3
+	bool rensStage3; // apply rens instead of stage 3
+	bool rensClosestDistStage3; // apply rens on relaxation of closest integer
+	bool multirensStage3; // rens with multiple reference points
+	bool stage3lessViolatedIntegers; // pick reference points with smallest violation of constraints in stage 3
+	bool stage3bestObjIntegers; // pick reference points with best objective in stage 3
+	bool stage3harmonicWeights; // harmonic weights for multiple integers in stage 3
+	int stage3IntegersObj;	// number of integer points used in the stage 3 objective
+	double stage3ScaleFactor; // scaling factor for multiple integer points in stage 3 objective
+	double stage3Time; 
+
+	double pdlpTol; // tolerance for pdlp
+	double pdlpTolDecreaseFactor; // decrease factor for pdlp tolerance
+	bool pdlpWarmStart; // true if pdlp should use warm start
+
 	// LP options
 	char firstOptMethod;
 	char reOptMethod;
@@ -74,12 +114,25 @@ private:
 	double objOffset;
 	SolutionTransformerPtr frac2int; /**< rounder */
 	std::vector<double> frac_x; /**< fractional x^* */
+	std::vector<double> ac_x; /**< analytic center */
 	int primalFeas; /**< is current fractional x^* primal feasible? */
 	std::vector<double> integer_x; /**< integer x^~ */
 	typedef std::pair<double, std::vector<double>> AlphaVector;
 	std::list<AlphaVector> lastIntegerX; /**< integer x cache */
+
+	typedef std::pair<int, std::vector<double>> NumberVector;
+	std::list<NumberVector> lastFracX; /**< fractional x cache */
+
+	typedef std::pair<double, std::vector<double>> DistVector;
+	std::list<DistVector> multipleIntegerX; /**< integer reference points */
+	std::list<DistVector> closestIntegerXs1; /**< closest integer x cache stage 1*/
+	std::list<DistVector> closestIntegerXs2; /**< closest integer x cache stage 2*/
+
+
 	RandGen rnd;
 	std::vector<double> closestPoint; /**< point closest to feasibility */
+	std::vector<double> closestFrac; /**< projection of closest point to feasibility */
+
 	double closestDist;
 	// problem data
 	bool isPureInteger; /**< is it a mixed linear program? */
@@ -88,6 +141,10 @@ private:
 	double objNorm;
 	std::vector<double> lb; /**< lower bounds */
 	std::vector<double> ub; /**< upper bounds */
+	std::vector<double> newlb; /**< lower bounds */
+	std::vector<double> newub; /**< upper bounds */
+
+
 	std::vector<char> xType; /**< column types */
 	std::vector<bool> fixed; /**< fixed status in the original formulation (usually due to presolve) */
 	std::vector<int> binaries; /**< list of binary vars indexes */
@@ -112,16 +169,26 @@ private:
 	StopWatch lpWatch;
 	StopWatch roundWatch;
 	double rootTime;
+	double acTime;
 	int rootLpIter;
 	// helpers
 	void solveInitialLP();
 	void perturbe(std::vector<double>& x, bool ignoreGeneralIntegers);
 	void restart(std::vector<double>& x, bool ignoreGeneralIntegers);
-	bool pumpLoop(double& runningAlpha, int stage);
+	bool pumpLoop(double& runningAlpha, int stage, double& dualBound, double& timeModel);
 	bool stage3();
 	void foundIncumbent(const std::vector<double>& x, double objval);
 	bool isInCache(double a, const std::vector<double>& x, bool ignoreGeneralIntegers);
 	void infeasibleSupport(const std::vector<double>& x, std::set<int>& supp, bool ignoreGeneralIntegers);
+
+
+	// added function
+	void aggregateFracs(std::vector<double>& aggr_frac_x, std::vector<double>& scaleVector);
+	void computeAC( std::vector<double>& x);
+	void integerFromAC(std::vector<double>& x, double& bestgamma, double step);
+	bool isComponentSame(int idx);
+	bool isComponentSameS3(int idx);
+
 };
 
 } // namespace dominiqs

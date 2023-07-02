@@ -47,8 +47,8 @@ public:
 		DOMINIQS_ASSERT( domainState );
 		domainState->restore();
 		for (StatePtr ps: propState) ps->restore();
-		engine.decisions.clear(); // need to thing about this!
-		engine.hasFailed = failed; // need to thing about this!
+		engine.decisions.clear(); // need to think about this!
+		engine.hasFailed = failed; // need to think about this!
 	}
 protected:
 	PropagationEngine& engine;

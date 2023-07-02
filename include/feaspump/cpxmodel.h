@@ -3,7 +3,8 @@
  * @brief Implementation of MIPModelI for CPLEX
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
- * 2019
+ * @author Gioni Mexi <gionimexi at gmail dot com>
+ * 2023
  */
 
 #ifndef CPXMODEL_H
@@ -24,7 +25,7 @@ public:
 	void writeModel(const std::string& filename, const std::string& format="") const override;
 	void writeSol(const std::string& filename) const override;
 	/* Solve */
-	void lpopt(char method) override;
+	double lpopt(char method, bool decrease_tol, bool initial) override;
 	void mipopt() override;
 	/* Presolve/postsolve */
 	void presolve() override;
@@ -46,6 +47,7 @@ public:
 	void dblParam(DblParam which, double value) override;
 	int intAttr(IntAttr which) const override;
 	double dblAttr(DblAttr which) const override;
+	void terminationReason(std::string& reason) override;
 	/* Access model data */
 	int nrows() const override;
 	int ncols() const override;
@@ -84,6 +86,7 @@ public:
 	void ctype(int cidx, char val) override;
 	void ctypes(int cnt, const int* cols, const char* values) override;
 	void switchToLP() override;
+	void switchToMIP() override;
 	/* Access to underlying CPLEX objects */
 	CPXENVptr getEnv() const { return env; }
 	CPXLPptr getLP() const { return lp; }

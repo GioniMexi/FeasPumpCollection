@@ -3,7 +3,7 @@
  * @brief Console logging functions
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
- * 2019
+ * 2023
  */
 
 #ifndef CONSOLELOG_H

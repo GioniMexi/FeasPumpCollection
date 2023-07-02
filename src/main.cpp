@@ -3,6 +3,8 @@
  * @brief Main App
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
+ * 2023
  */
 
 #include <iostream>
@@ -25,6 +27,12 @@
 #endif
 #ifdef HAS_XPRESS
 #include "feaspump/xprsmodel.h"
+#endif
+#ifdef HAS_SCIP
+#include "feaspump/scipmodel.h"
+#endif
+#if defined(HAS_SCIP) && defined(HAS_ORTOOLS)
+#include "feaspump/pdlpmodel.h"
 #endif
 #include <fmt/format.h>
 
@@ -53,7 +61,11 @@ int main (int argc, char const *argv[])
 	bool mipPresolve = gConfig().get("mipPresolve", true);
 	int numThreads = gConfig().get("numThreads", 0);
 	bool printSol = gConfig().get("printSol", false);
-	double timeLimit = gConfig().get("fp.timeLimit", 1e+75);
+	double timeLimit = gConfig().get("fp.timeLimit", 1e+20);
+	double pdlpTol = gConfig().get("fp.pdlpTol", 1.0e-6);
+	double pdlpTolDecreaseFactor = gConfig().get("fp.pdlpTolDecreaseFactor", 1.0);
+	double pdlpWarmStart = gConfig().get("fp.pdlpWarmStart", 0);
+
 	std::string probName = getProbName(Path(args.input[0]).getBasename());
 	// logger
 	consoleInfo("Timestamp: {}", currentDateTime());
@@ -84,13 +96,23 @@ int main (int argc, char const *argv[])
 #else
 	if (solver == "xprs")  throw std::runtime_error(fmt::format("Did not compile support for solver {}", solver));
 #endif
+#ifdef HAS_SCIP
+	if (solver == "scip")  model = MIPModelPtr(new SCIPModel());
+#else
+	if (solver == "scip")  throw std::runtime_error(fmt::format("Did not compile support for solver {}", solver));
+#endif
+#if defined(HAS_SCIP) && defined(HAS_ORTOOLS)
+	if (solver == "pdlp")  model = MIPModelPtr(new PDLPModel());
+#else
+	if (solver == "pdlp")  throw std::runtime_error(fmt::format("Did not compile support for solver {}", solver));
+#endif
 
 	if (!model)  throw std::runtime_error("No solver available for FP");
 
 	DOMINIQS_ASSERT(model);
 	double integralityEps = model->dblParam(DblParam::IntegralityTolerance);
 	gConfig().set("fp.integralityEps", integralityEps);
-	model->logging(false);
+	model->logging(true);
 	try
 	{
 		model->readModel(args.input[0]);
@@ -100,7 +122,6 @@ int main (int argc, char const *argv[])
 		// presolve
 		MIPModelPtr premodel;
 		bool hasPresolve = false;
-
 		if (mipPresolve)
 		{
 			model->dblParam(DblParam::TimeLimit, timeLimit);
@@ -128,6 +149,13 @@ int main (int argc, char const *argv[])
 		}
 		DOMINIQS_ASSERT( premodel );
 
+		// set tolerance for PDLP and warm start parameter
+		if (solver == "pdlp")
+		{
+			premodel->dblParam(DblParam::PdlpTolerance, pdlpTol);
+			premodel->dblParam(DblParam::PdlpToleranceDecreaseFactor, pdlpTolDecreaseFactor);
+			premodel->intParam(IntParam::PdlpWarmStart, pdlpWarmStart);
+		}
 		// feaspump
 		FeasibilityPump solver;
 		solver.readConfig();
@@ -171,7 +199,7 @@ int main (int argc, char const *argv[])
 
 			// check solution for feasibility
 			int m = model->nrows();
-			std::vector<std::string> rNames;
+			std::vector<std::string> rNames(m, "");
 			model->rowNames(rNames);
 			for (int i = 0; i < m; i++)
 			{

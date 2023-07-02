@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Prevent in-source builds
@@ -47,6 +47,12 @@ find_package(CPLEX)
 # Find XPRESS library
 find_package(XPRESS)
 
+# Find SCIP library
+find_package(SCIP)
+
+# Find ORTOOLS library
+find_package(ORTOOLS)
+
 # Find Threads
 find_package(Threads)
 
@@ -90,13 +96,27 @@ if (XPRESS_FOUND)
   target_link_libraries(fp PUBLIC Xpress::Xpress)
 endif()
 
+if (SCIP_FOUND)
+  target_compile_definitions(fp PUBLIC HAS_SCIP=1)
+  target_compile_definitions(fp2 PUBLIC HAS_SCIP=1)
+  target_sources(fp PRIVATE src/scipmodel.cpp)
+  target_link_libraries(fp PUBLIC Scip::Scip)
+endif()
+
+if (ORTOOLS_FOUND)
+  target_compile_definitions(fp PUBLIC HAS_ORTOOLS=1)
+  target_compile_definitions(fp2 PUBLIC HAS_ORTOOLS=1)
+  target_sources(fp PRIVATE src/pdlpmodel.cpp)
+  target_link_libraries(fp PUBLIC Pdlp::Pdlp)
+endif()
+
 # Generate version.h
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/include/feaspump/version.h.in
   ${CMAKE_CURRENT_SOURCE_DIR}/include/feaspump/version.h
 )
 
-
+include_directories ("/usr/include/eigen3")
 
 # Add subprojects
 if (GIT_FOUND AND MASTER_PROJECT)

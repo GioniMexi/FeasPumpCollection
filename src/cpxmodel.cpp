@@ -3,7 +3,8 @@
  * @brief Implementation of MIPModelI for CPLEX
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
- * 2019
+ * @author Gioni Mexi <gionimexi at gmail dot com>
+ * 2023
  */
 
 #include "feaspump/cpxmodel.h"
@@ -91,7 +92,7 @@ void CPXModel::writeSol(const std::string& filename) const
 
 
 /* Solve */
-void CPXModel::lpopt(char method)
+double CPXModel::lpopt(char method, bool decrease_tol, bool initial)
 {
 	DOMINIQS_ASSERT(env && lp);
 	switch(method)
@@ -100,8 +101,19 @@ void CPXModel::lpopt(char method)
 		case 'P': CPX_CALL(CPXprimopt, env, lp); break;
 		case 'D': CPX_CALL(CPXdualopt, env, lp); break;
 		case 'B': CPX_CALL(CPXbaropt, env, lp); break;
+		case 'A': 
+				{
+					// for the analytic point
+					CPX_CALL(CPXsetintparam, env, CPXPARAM_SolutionType, CPX_NONBASIC_SOLN);
+					CPX_CALL(CPXsetintparam, env, CPX_PARAM_PREIND, CPX_OFF);
+					CPX_CALL(CPXbaropt, env, lp); 
+					CPX_CALL(CPXsetintparam, env, CPXPARAM_SolutionType, CPX_BASIC_SOLN);
+					CPX_CALL(CPXsetintparam, env, CPX_PARAM_PREIND, CPX_ON);
+					break;
+				}
 		default: throw std::runtime_error("Unexpected method for lpopt");
 	}
+	return 0.0;
 }
 
 
@@ -306,7 +318,7 @@ void CPXModel::dblParam(DblParam which, double value)
 int CPXModel::intAttr(IntAttr which) const
 {
 	DOMINIQS_ASSERT(env && lp);
-	int value;
+	int value = 0;
 
 	switch(which)
 	{
@@ -321,6 +333,8 @@ int CPXModel::intAttr(IntAttr which) const
 			break;
 		case IntAttr::SimplexIterations:
 			value = CPXgetitcnt(env, lp);
+			break;
+		case IntAttr::PDLPIterations:
 			break;
 		default:
 			throw std::runtime_error("Unknown integer attribute");
@@ -347,6 +361,11 @@ double CPXModel::dblAttr(DblAttr which) const
 	return value;
 }
 
+void CPXModel::terminationReason(std::string& reason)
+{	
+	// ToDo
+	reason = "-";
+}
 
 /* Access model data */
 int CPXModel::nrows() const
@@ -819,6 +838,11 @@ void CPXModel::switchToLP()
 {
 	DOMINIQS_ASSERT(env && lp);
 	CPX_CALL(CPXchgprobtype, env, lp, CPXPROB_LP);
+}
+
+void CPXModel::switchToMIP()
+{
+
 }
 
 

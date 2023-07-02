@@ -36,7 +36,11 @@ template<typename Func, typename... Args>
 void XPRS_CALL(Func xprsfunc, XPRSprob prob, Args&&... args)
 {
 	int status = xprsfunc(prob, std::forward<Args>(args)...);
-	if (status)  throwXpressError(prob);
+	if (status)  
+	{	
+		if (status!=32) throwXpressError(prob);
+	}
+	
 }
 
 
@@ -108,7 +112,7 @@ void XPRSModel::writeSol(const std::string& filename) const
 
 
 /* Solve */
-void XPRSModel::lpopt(char method)
+double XPRSModel::lpopt(char method, bool decrease_tol, bool initial)
 {
 	DOMINIQS_ASSERT(prob);
 	switch(method)
@@ -117,8 +121,20 @@ void XPRSModel::lpopt(char method)
 		case 'P': XPRS_CALL(XPRSlpoptimize, prob, "p"); break;
 		case 'D': XPRS_CALL(XPRSlpoptimize, prob, "d"); break;
 		case 'B': XPRS_CALL(XPRSlpoptimize, prob, "b"); break;
+		case 'A': 
+				{
+					XPRS_CALL(XPRSsetintcontrol, prob, XPRS_CROSSOVER, 0);
+					XPRS_CALL(XPRSsetintcontrol, prob, XPRS_PRESOLVE, 0);
+					XPRS_CALL(XPRSsetintcontrol, prob, XPRS_SCALING, 0);
+					XPRS_CALL(XPRSlpoptimize, prob, "b"); 
+					XPRS_CALL(XPRSsetdefaultcontrol, prob, XPRS_CROSSOVER);
+					XPRS_CALL(XPRSsetdefaultcontrol, prob, XPRS_PRESOLVE);
+					XPRS_CALL(XPRSsetdefaultcontrol, prob, XPRS_SCALING);
+					break;
+				}
 		default: throw std::runtime_error("Unexpected method for lpopt");
 	}
+	return 0.0;
 }
 
 
@@ -233,9 +249,22 @@ bool XPRSModel::isPrimalFeas() const
 {
 	DOMINIQS_ASSERT(prob);
 	int primalFeas = 0;
-	int lpstat = 0;
-	XPRS_CALL(XPRSgetintattrib, prob, XPRS_LPSTATUS, &lpstat);
-	return (lpstat == XPRS_LP_OPTIMAL);
+
+	if (!inStage3)
+	{
+		int lpstat = 0;
+		XPRS_CALL(XPRSgetintattrib, prob, XPRS_LPSTATUS, &lpstat);
+	}
+	// Little hack to fix stage 3. The LP terminates with status other than XPRS_LP_OPTIMAL
+	// even if  MIP solution is found. Ask Domenico why!
+	// if (lpstat != XPRS_LP_OPTIMAL)
+	else
+	{	
+		int mipstat = 0;
+		XPRS_CALL(XPRSgetintattrib, prob, XPRS_MIPSTATUS, &mipstat);
+		return ((mipstat == XPRS_MIP_SOLUTION) || (mipstat == XPRS_MIP_OPTIMAL));
+	}
+	return 1;
 }
 
 
@@ -368,6 +397,7 @@ void XPRSModel::dblParam(DblParam which, double value)
 		case DblParam::TimeLimit:
 			int xprmaxtime;
 			if (value >= INT_MAX)  xprmaxtime = 0; //< 0 means no time limit
+			else if (value <= 1.0) xprmaxtime = 1; //< limit 1 second
 			else                   xprmaxtime = (int) floor(value);
 			XPRS_CALL(XPRSsetintcontrol, prob, XPRS_MAXTIME, -xprmaxtime);
 			break;
@@ -386,7 +416,7 @@ void XPRSModel::dblParam(DblParam which, double value)
 int XPRSModel::intAttr(IntAttr which) const
 {
 	DOMINIQS_ASSERT(prob);
-	int value;
+	int value = 0;
 
 	switch(which)
 	{
@@ -401,6 +431,8 @@ int XPRSModel::intAttr(IntAttr which) const
 			break;
 		case IntAttr::SimplexIterations:
 			XPRS_CALL(XPRSgetintattrib, prob, XPRS_SIMPLEXITER, &value);
+			break;
+		case IntAttr::PDLPIterations:
 			break;
 		default:
 			throw std::runtime_error("Unknown integer attribute");
@@ -427,6 +459,11 @@ double XPRSModel::dblAttr(DblAttr which) const
 	return value;
 }
 
+void XPRSModel::terminationReason(std::string& reason)
+{
+	// ToDo
+	reason = "-";
+}
 
 /* Access model data */
 int XPRSModel::nrows() const
@@ -920,6 +957,11 @@ void XPRSModel::switchToLP()
 }
 
 
+void XPRSModel::switchToMIP()
+{
+	inStage3 = true;
+}
+
 /* Private interface */
 XPRSModel* XPRSModel::clone_impl() const
 {
@@ -983,14 +1025,14 @@ XPRSModel* XPRSModel::presolvedmodel_impl()
 		for (int j = 0; j < n; j++)
 		{
 			if ((xtype[j] != 'C') && (xtype[j] != 'I') && (xtype[j] != 'B'))  throw std::runtime_error("Unsupported variable type for FP");
-			premodel->addEmptyCol(xNames[j], xtype[j], xlb[j], xub[j], xobj[j]);
+			premodel->addEmptyCol(xNames[j]+"_"+ std::to_string(j), xtype[j], xlb[j], xub[j], xobj[j]);
 		}
 		for (int i = 0; i < m; i++)
 		{
 			int rcnt = matrix.matbeg[i+1] - matrix.matbeg[i];
 			const int* idx = &matrix.matind[matrix.matbeg[i]];
 			const double* val = &matrix.matval[matrix.matbeg[i]];
-			premodel->addRow(rNames[i], idx, val, rcnt, rsense[i], rrhs[i], rngval[i]);
+			premodel->addRow(rNames[i]+"_"+ std::to_string(i), idx, val, rcnt, rsense[i], rrhs[i], rngval[i]);
 		}
 		// don't forget objective offset
 		double objoff = objOffset();

@@ -3,6 +3,7 @@
  * @brief Solution Transformers (a.k.a. rounders) Interface
  *
  * @author Domenico Salvagnin <dominiqs at gmail dot com>
+ * @author Gioni Mexi <gionimexi at gmail dot com>
  * 2008
  */
 
