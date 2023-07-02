@@ -1,4 +1,4 @@
-# Feasibility Pump 3.0 (soon)
+# Feasibility Pump Collection
 
 At this moment the code support the Feasibility Pump versions [[1]](#1),[[2]](#2),[[3]](#3),[[4]](#4).
 
