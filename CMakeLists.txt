@@ -69,6 +69,13 @@ target_include_directories(fp PUBLIC
 # Define fp2 executable
 add_executable(fp2 src/main.cpp)
 
+add_custom_command(TARGET fp2 POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/FPscip.set
+    $<TARGET_FILE_DIR:fp2>/FPscip.set
+  COMMENT "Copying FPscip.set to build directory"
+)
+
 target_include_directories(fp2 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
