@@ -155,7 +155,7 @@ void RandomRanker::ignoreGeneralIntegers(bool flag)
 void RandomRanker::setCurrentState(const std::vector<double>& x)
 {
 	std::iota(perm.begin(), perm.end(), 0);
-	std::random_shuffle(perm.begin(), perm.end(), rnd);
+	std::shuffle(perm.begin(), perm.end(), rnd);
 	nextItr = 0;
 	nCalled++;
 }

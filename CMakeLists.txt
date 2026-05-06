@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Prevent in-source builds
@@ -69,13 +69,20 @@ target_include_directories(fp PUBLIC
 # Define fp2 executable
 add_executable(fp2 src/main.cpp)
 
+add_custom_command(TARGET fp2 POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${CMAKE_CURRENT_SOURCE_DIR}/FPscip.set
+    $<TARGET_FILE_DIR:fp2>/FPscip.set
+  COMMENT "Copying FPscip.set to build directory"
+)
+
 target_include_directories(fp2 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 
 if (APPLE)
-	target_link_libraries(fp2 -Wl,-force_load Prop::Lib -Wl,-force_load Fp::Lib Utils::Lib fmt::fmt)
+	target_link_libraries(fp2 -Wl,-force_load Prop::Lib -Wl,-force_load Fp::Lib)
 else()
 	target_link_libraries(fp2  -Wl,--whole-archive Prop::Lib Fp::Lib -Wl,--no-whole-archive Utils::Lib fmt::fmt)
 endif()
@@ -99,8 +106,9 @@ endif()
 if (SCIP_FOUND)
   target_compile_definitions(fp PUBLIC HAS_SCIP=1)
   target_compile_definitions(fp2 PUBLIC HAS_SCIP=1)
+  include_directories (${SCIP_INCLUDE_DIRS})
   target_sources(fp PRIVATE src/scipmodel.cpp)
-  target_link_libraries(fp PUBLIC Scip::Scip)
+  target_link_libraries(fp PUBLIC ${SCIP_LIBRARIES})
 endif()
 
 if (ORTOOLS_FOUND)

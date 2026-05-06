@@ -646,7 +646,7 @@ bool FeasibilityPump::pump(const std::vector<double>& xStart, bool pFeas)
 	LOG_ITEM("primalBound", primalBound);
 	LOG_ITEM("dualBound", dualBound);
 	LOG_ITEM("stage", stage);
-	LOG_ITEM("objSense", origObjSense);
+	LOG_ITEM("objSense", (int)origObjSense);
 	LOG_ITEM("numSols", (int)found);
 	LOG_ITEM("totalLpTime", lpWatch.getTotal());
 	LOG_ITEM("totalRoundingTime", roundWatch.getTotal());
@@ -1686,7 +1686,7 @@ bool FeasibilityPump::stage3()
 
 		for (int j: binaries)
 		{	
-			if ( (newlb[j] == newub[j]) )
+			if ( newlb[j] == newub[j] )
 			{	
 				model->lb(j,newlb[j]);
 				model->ub(j,newub[j]);

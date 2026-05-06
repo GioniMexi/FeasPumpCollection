@@ -88,6 +88,12 @@ public:
 	 * @param _seed (uses generateSeed!)
 	 */
 	STLRandGen(uint64_t _seed = 0) : RandGen(_seed) {}
+	// URBG interface required by std::shuffle
+	typedef std::default_random_engine::result_type result_type;
+	result_type operator()() { return engine(); }
+	static constexpr result_type min() { return std::default_random_engine::min(); }
+	static constexpr result_type max() { return std::default_random_engine::max(); }
+	// Legacy interface: random integer in [0, N)
 	long operator()(long N)
 	{
 		long res = lrint(getFloat() * (N - 1));

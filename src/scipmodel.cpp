@@ -19,21 +19,22 @@ std::vector<std::string> SCIPModel::getVarNames()
 {
 	DOMINIQS_ASSERT(scip);
 	SCIP_STAGE stage = SCIPgetStage(scip);
-	if ( stage == SCIP_STAGE_PROBLEM) ;
+	if ( stage == SCIP_STAGE_PROBLEM)
 	{
 		colNames(origColNames);
 		return origColNames;
-	}	
-	if ( stage == SCIP_STAGE_TRANSFORMED) ;
+	}
+	if ( stage == SCIP_STAGE_TRANSFORMED)
 	{
 		colNames(transColNames);
 		return transColNames;
-	}		
-	if ( stage == SCIP_STAGE_PRESOLVED) ;
+	}
+	if ( stage == SCIP_STAGE_PRESOLVED)
 	{
 		colNames(presColNames);
 		return presColNames;
-	}			
+	}
+	return {};
 }
 
 SCIPModel::SCIPModel()

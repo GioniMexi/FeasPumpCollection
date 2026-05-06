@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <limits>
 
 #include "utils/cutpool.h"
 #include "utils/maths.h"

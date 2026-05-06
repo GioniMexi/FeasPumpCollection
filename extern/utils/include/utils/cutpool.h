@@ -86,7 +86,7 @@ public:
 
 typedef std::shared_ptr<Cut> CutPtr;
 
-struct cutptr_equal : std::binary_function<CutPtr, CutPtr, bool>
+struct cutptr_equal
 {
 	bool operator()(const CutPtr& x, const CutPtr& y) const
 	{
@@ -99,7 +99,7 @@ struct cutptr_equal : std::binary_function<CutPtr, CutPtr, bool>
 	}
 };
 
-struct cutptr_hash : std::unary_function<CutPtr, std::size_t>
+struct cutptr_hash
 {
 	std::size_t operator()(const CutPtr& x) const { return x->sig; }
 };
